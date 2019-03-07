@@ -33,6 +33,44 @@ Mat getHistogram(Mat *src, int histSize)
 	return img_hist;
 }
 
+void getDominantHistogram(img_type *src, int type)
+{
+	Mat temp = src->img;
+	split( temp, src->img_planes );
+
+	if(type == true)
+	{
+		src->img_hist[0] = getHistogram(&src->img_planes[0],180);
+		src->img_hist[1] = getHistogram(&src->img_planes[1],256);
+		src->img_hist[2] = getHistogram(&src->img_planes[2],256);
+		src->dominantChannel = 0; //Channel H
+	}
+
+	else
+	{
+		src->img_hist[0] = getHistogram(&src->img_planes[0],256);
+		src->img_hist[1] = getHistogram(&src->img_planes[1],256);
+		src->img_hist[2] = getHistogram(&src->img_planes[2],256);
+
+		double areas[3] = {0,0,0};
+		int i, histSize = 256;
+
+		//Histogram area comparison
+		for(i = 0; i < histSize - 1; i++ )
+		{
+		  areas[0] += i*(double)src->img_hist[0].at<float>(i);
+		  areas[1] += i*(double)src->img_hist[1].at<float>(i);
+		  areas[2] += i*(double)src->img_hist[2].at<float>(i);
+		}
+
+		printf("\n\narea r = %f\narea g = %f \narea b = %f",areas[0],areas[1],areas[2]);
+		fflush(stdout);
+
+		//Get index of max element
+		src->dominantChannel = distance(areas,max_element(areas, areas + 3));
+	}
+}
+
 void drawHistogram(Mat *src, Mat dst, int histSize, Scalar color)
 {
 	Mat img_hist = *src;

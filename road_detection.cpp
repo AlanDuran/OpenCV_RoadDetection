@@ -11,7 +11,7 @@
 #include "basic_operations.h"
 
 #define xDEBUG
-#define xHSV			0
+#define xHSV			1
 
 #define KERNEL_WIDTH	41
 #define KERNEL_HEIGHT	41
@@ -24,29 +24,25 @@ using namespace std;
 using namespace cv;
 
 #ifdef DEBUG
-	char original[] = "Imagen original";
+	char window_full[] = "Imagen original";
 	char window_gauss[] = "Filtro gaussiano";
 	char window_rec[] = "Recorte cielo";
-	char window_cc[] = "Canal seleccionado";
-	char window_rec_s[] = "Recorte camino";
 #endif
 
-char sky[] = "Threshold cielo";
 char window_horizon[] = "Horizonte";
 char window_road[] = "Camino";
+char window_display[] = "Imagen original redimensionada";
 
-Mat src,dst,temp;
+Mat src,dst,temp, display;
+img_type img;
 
 int main( int argc, char** argv )
 {
-	/*********** Load image and pre-processing *********************/
+/***************** Load image and pre-processing ***************************/
+
+	//Read Image
 	const char* filename = argc >=2 ? argv[1] : "data/pixy5.png";
 	src = imread( filename, IMREAD_COLOR );
-
-	if(xHSV == true)
-	{
-		cvtColor(src, src, CV_BGR2HSV);
-	}
 
 	if(src.empty())
 	{
@@ -56,10 +52,10 @@ int main( int argc, char** argv )
 
 	#ifdef DEBUG
 		//Display image
-		showImg( &src, original, WINDOW_AUTOSIZE, 100);
+		showImg( &src, window_full, WINDOW_AUTOSIZE, 100);
 	#endif
 
-	//Gaussian filter and image reduction
+	//Image resizing
 	if(src.rows > SIZE_Y)
 	{
 	  float ratio = src.rows / (float)SIZE_Y;
@@ -67,6 +63,15 @@ int main( int argc, char** argv )
 	  resize(src, src, Size(new_cols,SIZE_Y), 0, 0, INTER_LANCZOS4);
 	}
 
+	display = src.clone();
+
+	//Change color space
+	if(xHSV == true)
+	{
+		cvtColor(src, src, CV_BGR2HSV);
+	}
+
+	//Smoothing image with Gaussian filter
 	GaussianBlur( src, dst, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 
 	//Select image fraction to analyze
@@ -74,50 +79,41 @@ int main( int argc, char** argv )
 	Range cols(0, src.cols);
 	temp = dst(rows,cols);
 
+	showImg(&display, window_display, WINDOW_AUTOSIZE, 100);
+
 	#ifdef DEBUG
 		showImg(&dst, window_gauss, WINDOW_AUTOSIZE, 100);
-		showImg(&temp, window_rec, WINDOW_AUTOSIZE, 100);
 	#endif
 
 
-	/************* Histogram calculation and selection **************************/
+/************* Histogram calculation and selection **************************/
 
-	uint8_t channel;
-	vector<Mat> img_planes;
-	split( temp, img_planes );
-	Mat img_hist[3];
+	img.img = temp;
+	//Calculate an histogram for each channel, store it in img.img_hist[] and select dominant channel
+	getDominantHistogram(&img, xHSV);
 
-	if(xHSV == true)
-	{
-		img_hist[0] = getHistogram(&img_planes[0],180);
-		img_hist[1] = getHistogram(&img_planes[1],256);
-		img_hist[2] = getHistogram(&img_planes[2],256);
-		channel = 0; //Channel H
-	}
+/**************** Horizon detection *****************************************/
 
-	else
-	{
-		img_hist[0] = getHistogram(&img_planes[0],256);
-		img_hist[1] = getHistogram(&img_planes[1],256);
-		img_hist[2] = getHistogram(&img_planes[2],256);
+	uint16_t limit = (xHSV) ? 180 : 256;
 
-		double areas[3] = {0,0,0};
-		int i, histSize = 256;
+	uint16_t horizon = get_horizon(&img.img_planes[img.dominantChannel], limit);
+	horizon = src.rows - horizon - src.rows*0.4;
 
-		//Histogram area comparison
-		for(i = 0; i < histSize - 1; i++ )
-		{
-		  areas[0] += i*(double)img_hist[0].at<float>(i);
-		  areas[1] += i*(double)img_hist[1].at<float>(i);
-		  areas[2] += i*(double)img_hist[2].at<float>(i);
-		}
+	temp = display.clone();
+	line( temp, Point(0,horizon), Point(src.cols,horizon),Scalar( 0, 0, 255 ), 2, 1);
+	showImg(&temp, window_horizon, WINDOW_AUTOSIZE, 100);
 
-		printf("\n\narea r = %f\narea g = %f \narea b = %f",areas[0],areas[1],areas[2]);
-		fflush(stdout);
+/******************** Road detection with Otsu *******************************/
+	rows.start = horizon;
+	rows.end = src.rows;
+	temp = dst(rows,cols);
 
-		//Get index of max element
-		channel = distance(areas,max_element(areas, areas + 3));
-	}
+	img.img = temp;
+	getDominantHistogram(&img, xHSV);
+
+	uint8_t thold = get_threshold(&img.img_hist[img.dominantChannel], limit);
+	threshold( img.img_planes[img.dominantChannel], temp, thold, 255, THRESH_BINARY);
+	showImg(&temp, window_road, WINDOW_AUTOSIZE, 100);
 
 	#ifdef DEBUG
 
@@ -126,89 +122,24 @@ int main( int argc, char** argv )
 
 		if(xHSV)
 		{
-			drawHistogram(&img_hist[0],histImage,180,Scalar(255,0,0));
+			drawHistogram(&img.img_hist[0],histImage,180,Scalar(255,0,0));
 		}
 
 		else
 		{
-			drawHistogram(&img_hist[0],histImage,256,Scalar(255,0,0));
+			drawHistogram(&img.img_hist[0],histImage,256,Scalar(255,0,0));
 		}
 
-		drawHistogram(&img_hist[1],histImage,256,Scalar(0,255,0));
-		drawHistogram(&img_hist[2],histImage,256,Scalar(0,0,255));
+		drawHistogram(&img.img_hist[1],histImage,256,Scalar(0,255,0));
+		drawHistogram(&img.img_hist[2],histImage,256,Scalar(0,0,255));
 
 		imshow("calcHist Demo", histImage );
-		showImg(&img_planes[channel], window_cc, WINDOW_AUTOSIZE, 100);
 	#endif
 
-
-/**************** Horizon detection ********************************************/
-
-	uint16_t limit = (xHSV) ? 180 : 256;
-	uint8_t thold = get_threshold(&img_hist[channel], limit);
-	threshold( img_planes[channel], temp, thold, 255, THRESH_BINARY);
-	showImg(&temp, sky, WINDOW_AUTOSIZE, 100);
-
-	uint16_t horizon = get_horizon(&img_planes[channel], limit);
-	horizon = src.rows - horizon - src.rows*0.4;
-
-	temp = src.clone();
-	line( temp, Point(0,horizon), Point(src.cols,horizon),Scalar( 0, 0, 255 ), 2, 1);
-	showImg(&temp, window_horizon, WINDOW_AUTOSIZE, 100);
-
-/******************** Road detection ******************************************/
-
-	rows.start = horizon;
-	rows.end = src.rows;
-	temp = dst(rows,cols);
-
-	#ifdef DEBUG
-		showImg(&temp, window_rec_s, WINDOW_AUTOSIZE, 100);
-	#endif
-
-	split( temp, img_planes );
-
-	if(xHSV == true)
-	{
-		img_hist[0] = getHistogram(&img_planes[0],180);
-		img_hist[1] = getHistogram(&img_planes[1],256);
-		img_hist[2] = getHistogram(&img_planes[2],256);
-		channel = 0; //Channel H
-	}
-
-	else
-	{
-		img_hist[0] = getHistogram(&img_planes[0],256);
-		img_hist[1] = getHistogram(&img_planes[1],256);
-		img_hist[2] = getHistogram(&img_planes[2],256);
-
-		double areas[3] = {0,0,0};
-		int i, histSize = 256;
-
-		//Histogram area comparison
-		for(i = 0; i < histSize - 1; i++ )
-		{
-		  areas[0] += i*(double)img_hist[0].at<float>(i);
-		  areas[1] += i*(double)img_hist[1].at<float>(i);
-		  areas[2] += i*(double)img_hist[2].at<float>(i);
-		}
-
-		printf("\n\narea r = %f\narea g = %f \narea b = %f",areas[0],areas[1],areas[2]);
-		fflush(stdout);
-
-		//Get index of max element
-		channel = distance(areas,max_element(areas, areas + 3));
-	}
-
-	thold = get_threshold(&img_hist[channel], limit);
-	threshold( img_planes[channel], temp, thold, 255, THRESH_BINARY);
-	showImg(&temp, window_road, WINDOW_AUTOSIZE, 100);
-	//cvReleaseHist();
-
-/****************** Image derivative **********************************/
+/************ Improvements with Canny detector and Hough transform *****************/
 
 	GaussianBlur( src, dst, Size(3, 3), 0, 0);
-	split( src, img_planes );
+	split( src, img.img_planes );
 
 	char window_name[] = "Sobel Demo - Simple Edge Detector";
 	int scale = 1;
@@ -217,10 +148,10 @@ int main( int argc, char** argv )
 	Mat grad_x, grad_y, grad;
 	Mat abs_grad_x, abs_grad_y;
 
-	Sobel( img_planes[channel], grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT );
+	Sobel( img.img_planes[img.dominantChannel], grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT );
 	convertScaleAbs( grad_x, abs_grad_x );
 
-	Sobel( img_planes[channel], grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT );
+	Sobel( img.img_planes[img.dominantChannel], grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT );
 	convertScaleAbs( grad_y, abs_grad_y );
 
 	/// Total Gradient (approximate)
