@@ -13,9 +13,8 @@ using namespace std;
 
 #define N_DIV 10
 
-uint8_t get_threshold(Mat *src, int limit)
+uint8_t get_threshold(Mat hist, int limit)
 {
-	Mat hist = *src;
 	double q[2] = {0,0}, w_mean[2] = {0,0}, cv[2] = {0,0};
 	double intra_cv[limit];
 	int threshold,i;
@@ -80,9 +79,8 @@ uint8_t get_threshold(Mat *src, int limit)
 	return distance(intra_cv,min_element(intra_cv, intra_cv + limit));
 }
 
-uint16_t get_horizon(Mat *src, int limit)
+uint16_t get_horizon(Mat image, int limit)
 {
-	Mat image = *src;
 	Mat rec;
 	Mat temp[N_DIV];
 
@@ -112,10 +110,8 @@ uint16_t get_horizon(Mat *src, int limit)
 		Range cols(0,image.cols);
 		temp[N_DIV - i - 1] = image(rows,cols);
 
-		char copy[] = "Imagen copia";
-
 		calcHist(&temp[N_DIV - i - 1], 1, CV_HIST_ARRAY, Mat(), hist, 1, &histSize, &histRange, uniform, accumulate );
-		tholds[N_DIV - i - 1] = get_threshold(&hist, limit);
+		tholds[N_DIV - i - 1] = get_threshold(hist, limit);
 	}
 
 	//Get the percentage of foreground (white) pixels for each threshold
@@ -136,4 +132,49 @@ uint16_t get_horizon(Mat *src, int limit)
 	}
 
 	return segment * distance(pdiff,max_element(pdiff, pdiff + N_DIV));
+}
+
+Mat get_roadImage(img_type *src, int type)
+{
+	Mat road[2];
+	uint8_t selected_img = 0;
+
+	//Detect road with received image
+	uint16_t limit = (type) ? 180 : 256;
+	getDominantHistogram(src, type);
+
+	uint8_t thold = get_threshold(src->img_hist[src->dominantChannel], limit);
+	threshold( src->img_planes[src->dominantChannel], road[0], thold, 255, THRESH_BINARY);
+
+	//Check if white pixels (road) are in the center bottom of the image
+	Range rows(src->img.rows * 0.8, src->img.rows);
+	Range cols(src->img.cols * 0.45, src->img.cols * 0.55);
+
+	if(countNonZero(road[0](rows,cols)) < (src->img.rows * 0.2)*(src->img.cols * 0.1) * 0.9)
+	{
+		//Detect road with negated image
+		Mat temp = src->img_planes[src->dominantChannel].clone();
+		temp = limit - temp;
+
+		Mat hist = getHistogram(temp,limit);
+
+		thold = get_threshold(hist, limit);
+		threshold( temp, road[1], thold, 255, THRESH_BINARY);
+
+		//Compare road pixels of both segmented images
+		if(countNonZero(road[0](rows,cols)) > countNonZero(road[1](rows,cols)))
+		{
+			selected_img = 0;
+		}
+
+		{
+			src->img_planes[src->dominantChannel] = limit - src->img_planes[src->dominantChannel];
+			selected_img = 1;
+		}
+
+		hist.release();
+		temp.release();
+	}
+
+	return road[selected_img];
 }

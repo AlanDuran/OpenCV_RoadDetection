@@ -19,11 +19,10 @@ typedef struct
 	uint8_t dominantChannel;
 } img_type;
 
-void showImg(cv::Mat *img, char * window, int type, int time);
-cv::Mat getHistogram(cv::Mat *src, int histSize);
+void showImg(cv::Mat img, char * window, int type, int time);
+cv::Mat getHistogram(cv::Mat src, int histSize);
+void drawHistogram(cv::Mat src, cv::Mat dst, int histSize, cv::Scalar color);
 void getDominantHistogram(img_type *src, int type);
-void drawHistogram(cv::Mat *src, cv::Mat dst, int histSize, cv::Scalar color);
-
 
 
 #endif /* SRC_BASIC_OPERATIONS_H_ */

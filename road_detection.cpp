@@ -30,7 +30,7 @@ using namespace cv;
 #endif
 
 char window_horizon[] = "Horizonte";
-char window_road[] = "Camino";
+char window_otsu[] = "Camino detectado con otsu";
 char window_display[] = "Imagen original redimensionada";
 
 Mat src,dst,temp, display;
@@ -79,7 +79,7 @@ int main( int argc, char** argv )
 	Range cols(0, src.cols);
 	temp = dst(rows,cols);
 
-	showImg(&display, window_display, WINDOW_AUTOSIZE, 100);
+	showImg(display, window_display, WINDOW_AUTOSIZE, 100);
 
 	#ifdef DEBUG
 		showImg(&dst, window_gauss, WINDOW_AUTOSIZE, 100);
@@ -92,53 +92,34 @@ int main( int argc, char** argv )
 	//Calculate an histogram for each channel, store it in img.img_hist[] and select dominant channel
 	getDominantHistogram(&img, xHSV);
 
-/**************** Horizon detection *****************************************/
+/**************** Horizon detection *************************************************/
 
 	uint16_t limit = (xHSV) ? 180 : 256;
 
-	uint16_t horizon = get_horizon(&img.img_planes[img.dominantChannel], limit);
+	uint16_t horizon = get_horizon(img.img_planes[img.dominantChannel], limit);
 	horizon = src.rows - horizon - src.rows*0.4;
 
 	temp = display.clone();
 	line( temp, Point(0,horizon), Point(src.cols,horizon),Scalar( 0, 0, 255 ), 2, 1);
-	showImg(&temp, window_horizon, WINDOW_AUTOSIZE, 100);
+	showImg(temp, window_horizon, WINDOW_AUTOSIZE, 100);
 
-/******************** Road detection with Otsu *******************************/
+/******************** Road detection with Otsu **************************************/
+
+	Mat otsu_road;
+	//Cut the image from horizon to the bottom
 	rows.start = horizon;
 	rows.end = src.rows;
 	temp = dst(rows,cols);
 
 	img.img = temp;
-	getDominantHistogram(&img, xHSV);
+	otsu_road = get_roadImage(&img,xHSV);
 
-	uint8_t thold = get_threshold(&img.img_hist[img.dominantChannel], limit);
-	threshold( img.img_planes[img.dominantChannel], temp, thold, 255, THRESH_BINARY);
-	showImg(&temp, window_road, WINDOW_AUTOSIZE, 100);
-
-	#ifdef DEBUG
-
-		int hist_w = 512, hist_h = 400;
-		Mat histImage( hist_h, hist_w, CV_8UC3, Scalar( 0,0,0) );
-
-		if(xHSV)
-		{
-			drawHistogram(&img.img_hist[0],histImage,180,Scalar(255,0,0));
-		}
-
-		else
-		{
-			drawHistogram(&img.img_hist[0],histImage,256,Scalar(255,0,0));
-		}
-
-		drawHistogram(&img.img_hist[1],histImage,256,Scalar(0,255,0));
-		drawHistogram(&img.img_hist[2],histImage,256,Scalar(0,0,255));
-
-		imshow("calcHist Demo", histImage );
-	#endif
+	showImg(otsu_road, window_otsu, WINDOW_AUTOSIZE, 100);
 
 /************ Improvements with Canny detector and Hough transform *****************/
 
-	GaussianBlur( src, dst, Size(3, 3), 0, 0);
+	/*
+	GaussianBlur( src, dst, Size(5, 5), 0, 0);
 	split( src, img.img_planes );
 
 	char window_name[] = "Sobel Demo - Simple Edge Detector";
@@ -158,6 +139,18 @@ int main( int argc, char** argv )
 	addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad );
 
 	imshow( window_name, grad );
+	waitKey(100);
+*/
+	temp = src(rows,cols);
+	GaussianBlur( temp, temp, Size(5, 5), 0, 0);
+	split( temp, img.img_planes );
+
+	char window_edge[] = "Canny Edge Detector";
+	temp = dst(rows,cols);
+	Mat edge;
+	Canny(img.img_planes[img.dominantChannel],edge,15,25);
+	imshow( window_edge, edge);
 	waitKey(100000);
+
 	return 0;
 }

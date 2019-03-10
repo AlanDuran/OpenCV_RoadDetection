@@ -6,22 +6,20 @@
  */
 
 #include "basic_operations.h"
-
 #include <stdio.h>
 
 using namespace cv;
 using namespace std;
 
-void showImg(Mat *img, char * window, int type, int time)
+void showImg(Mat img, char * window, int type, int time)
 {
 	namedWindow( window, type );
-	imshow( window, *img );
+	imshow( window, img );
 	waitKey (time);
 }
 
-Mat getHistogram(Mat *src, int histSize)
+Mat getHistogram(Mat img_planes, int histSize)
 {
-	Mat img_planes = *src;
 	Mat img_hist;
 
 	float range[] = { 0, (float)histSize - 1}; //the upper boundary is exclusive
@@ -40,17 +38,17 @@ void getDominantHistogram(img_type *src, int type)
 
 	if(type == true)
 	{
-		src->img_hist[0] = getHistogram(&src->img_planes[0],180);
-		src->img_hist[1] = getHistogram(&src->img_planes[1],256);
-		src->img_hist[2] = getHistogram(&src->img_planes[2],256);
+		src->img_hist[0] = getHistogram(src->img_planes[0],180);
+		src->img_hist[1] = getHistogram(src->img_planes[1],256);
+		src->img_hist[2] = getHistogram(src->img_planes[2],256);
 		src->dominantChannel = 0; //Channel H
 	}
 
 	else
 	{
-		src->img_hist[0] = getHistogram(&src->img_planes[0],256);
-		src->img_hist[1] = getHistogram(&src->img_planes[1],256);
-		src->img_hist[2] = getHistogram(&src->img_planes[2],256);
+		src->img_hist[0] = getHistogram(src->img_planes[0],256);
+		src->img_hist[1] = getHistogram(src->img_planes[1],256);
+		src->img_hist[2] = getHistogram(src->img_planes[2],256);
 
 		double areas[3] = {0,0,0};
 		int i, histSize = 256;
@@ -71,9 +69,8 @@ void getDominantHistogram(img_type *src, int type)
 	}
 }
 
-void drawHistogram(Mat *src, Mat dst, int histSize, Scalar color)
+void drawHistogram(Mat img_hist, Mat dst, int histSize, Scalar color)
 {
-	Mat img_hist = *src;
 	Mat temp;
 
 	normalize(img_hist, temp, 0, dst.rows, NORM_MINMAX, -1, Mat() );
