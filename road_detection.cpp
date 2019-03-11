@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "otsu.h"
 #include "basic_operations.h"
+#include "GeneralHoughTransform.hpp"
 
 #define xDEBUG
 #define xHSV			1
@@ -41,7 +42,7 @@ int main( int argc, char** argv )
 /***************** Load image and pre-processing ***************************/
 
 	//Read Image
-	const char* filename = argc >=2 ? argv[1] : "data/pixy5.png";
+	const char* filename = argc >=2 ? argv[1] : "data/sampleroad.jpg";
 	src = imread( filename, IMREAD_COLOR );
 
 	if(src.empty())
@@ -116,7 +117,7 @@ int main( int argc, char** argv )
 
 	showImg(otsu_road, window_otsu, WINDOW_AUTOSIZE, 100);
 
-/************ Improvements with Canny detector and Hough transform *****************/
+/******** Improvements with Canny detector and Generalized Hough transform ************/
 
 	/*
 	GaussianBlur( src, dst, Size(5, 5), 0, 0);
@@ -140,16 +141,26 @@ int main( int argc, char** argv )
 
 	imshow( window_name, grad );
 	waitKey(100);
+
+	int main(int argc, char** argv) {
+	Mat tpl = imread("res/sampleroad.jpg");
+	Mat src = tpl.clone();
+	GeneralHoughTransform ght(tpl);
+
+ 	Size s( src.size().width / 4, src.size().height / 4);
+ 	resize( src, src, s, 0, 0, CV_INTER_AREA );
+
+ 	imshow("debug - image", src);
+
+ 	ght.accumulate(src);
+
+	return 0;
+}
 */
 	temp = src(rows,cols);
-	GaussianBlur( temp, temp, Size(5, 5), 0, 0);
 	split( temp, img.img_planes );
-
-	char window_edge[] = "Canny Edge Detector";
-	temp = dst(rows,cols);
-	Mat edge;
-	Canny(img.img_planes[img.dominantChannel],edge,15,25);
-	imshow( window_edge, edge);
+	GeneralHoughTransform ght(display(rows,cols),img.img_planes[img.dominantChannel],xHSV);
+	ght.accumulate(img.img_planes[img.dominantChannel]);
 	waitKey(100000);
 
 	return 0;
