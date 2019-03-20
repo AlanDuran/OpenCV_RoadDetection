@@ -6,10 +6,10 @@
  */
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <stdio.h>
 #include "otsu.h"
 #include "basic_operations.h"
-#include "GeneralHoughTransform.hpp"
 
 #define xDEBUG
 #define xHSV			1
@@ -25,24 +25,24 @@ using namespace std;
 using namespace cv;
 
 #ifdef DEBUG
-	char window_full[] = "Imagen original";
-	char window_gauss[] = "Filtro gaussiano";
-	char window_rec[] = "Recorte cielo";
+	const char window_full[] = "Imagen original";
+	const char window_gauss[] = "Filtro gaussiano";
+	const char window_rec[] = "Recorte cielo";
 #endif
 
-char window_horizon[] = "Horizonte";
-char window_otsu[] = "Camino detectado con otsu";
-char window_display[] = "Imagen original redimensionada";
+const char window_horizon[] = "Horizonte";
+const char window_otsu[] = "Camino detectado con otsu";
+const char window_display[] = "Imagen original redimensionada";
 
 Mat src,dst,temp, display;
 img_type img;
 
 int main( int argc, char** argv )
 {
-/***************** Load image and pre-processing ***************************/
+/********************** Load image and pre-processing ******************************/
 
 	//Read Image
-	const char* filename = argc >=2 ? argv[1] : "data/sampleroad.jpg";
+	const char* filename = argc >=2 ? argv[1] : "data/iteso0.png";
 	src = imread( filename, IMREAD_COLOR );
 
 	if(src.empty())
@@ -87,7 +87,7 @@ int main( int argc, char** argv )
 	#endif
 
 
-/************* Histogram calculation and selection **************************/
+/******************* Histogram calculation and selection ****************************/
 
 	img.img = temp;
 	//Calculate an histogram for each channel, store it in img.img_hist[] and select dominant channel
@@ -107,6 +107,7 @@ int main( int argc, char** argv )
 /******************** Road detection with Otsu **************************************/
 
 	Mat otsu_road;
+
 	//Cut the image from horizon to the bottom
 	rows.start = horizon;
 	rows.end = src.rows;
@@ -117,51 +118,107 @@ int main( int argc, char** argv )
 
 	showImg(otsu_road, window_otsu, WINDOW_AUTOSIZE, 100);
 
-/******** Improvements with Canny detector and Generalized Hough transform ************/
+	#ifdef DEBUG
+		Mat road_test;
+		temp = dst(Range(dst.rows * 0.8, dst.rows), Range(dst.cols * .4, dst.cols*0.6));
+		img.img = temp;
+		showImg(display(Range(dst.rows * 0.8, dst.rows),
+				Range(dst.cols * .4, dst.cols*0.6)), "Otsu test", WINDOW_AUTOSIZE, 100);
+		showImg(get_roadImage(&img,xHSV), "Otsu test result", WINDOW_AUTOSIZE, 100);
+	#endif
+/******** Improvements with Canny detector and Hough Line transform *****************/
 
-	/*
-	GaussianBlur( src, dst, Size(5, 5), 0, 0);
-	split( src, img.img_planes );
+	Mat houghP;
 
-	char window_name[] = "Sobel Demo - Simple Edge Detector";
-	int scale = 1;
-	int delta = 0;
-	int ddepth = CV_32F;
-	Mat grad_x, grad_y, grad;
-	Mat abs_grad_x, abs_grad_y;
+	houghP = display(rows,cols).clone();
+	//cvtColor(houghP,houghP,CV_BGR2GRAY);
+	GaussianBlur( houghP, houghP, Size(5, 5), 0, 0);
 
-	Sobel( img.img_planes[img.dominantChannel], grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT );
-	convertScaleAbs( grad_x, abs_grad_x );
+	// Edge detection
+	Canny(houghP, houghP, 150, 250, 3); //25, 100, 3
 
-	Sobel( img.img_planes[img.dominantChannel], grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT );
-	convertScaleAbs( grad_y, abs_grad_y );
+    imshow("Canny", houghP);
 
-	/// Total Gradient (approximate)
-	addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad );
+    // Probabilistic Line Transform
+    vector<Vec4i> linesP; // will hold the results of the detection
 
-	imshow( window_name, grad );
-	waitKey(100);
 
-	int main(int argc, char** argv) {
-	Mat tpl = imread("res/sampleroad.jpg");
-	Mat src = tpl.clone();
-	GeneralHoughTransform ght(tpl);
+    HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 20 ); // runs the actual detection 10, CV_PI/360, 80, 20, 20
 
- 	Size s( src.size().width / 4, src.size().height / 4);
- 	resize( src, src, s, 0, 0, CV_INTER_AREA );
+    // Draw the lines
+    for( size_t i = 0; i < linesP.size(); i++ )
+    {
+        Vec4i l = linesP[i];
+        line( houghP, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(255), 1, 16);
+    }
 
- 	imshow("debug - image", src);
+    // Show results
+    imshow("Detected Lines - Probabilistic Line Transform", houghP);
 
- 	ght.accumulate(src);
+/************************* Blob operations *****************************************/
 
-	return 0;
-}
-*/
-	temp = src(rows,cols);
-	split( temp, img.img_planes );
-	GeneralHoughTransform ght(display(rows,cols),img.img_planes[img.dominantChannel],xHSV);
-	ght.accumulate(img.img_planes[img.dominantChannel]);
-	waitKey(100000);
+    vector<vector<Point> > contours;
+    vector<Vec4i> hierarchy;
+    vector<int> small_blobs;
+    double contour_area;
+
+	findContours( houghP, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+
+	// Find indices of contours whose area is less than `threshold`
+	for (size_t i=0; i<contours.size(); ++i) {
+		contour_area = contourArea(contours[i]) ;
+		if ( contour_area < 250)
+			small_blobs.push_back(i);
+	}
+
+	Mat edges = Mat::zeros(houghP.size(), CV_8UC1);
+
+	for (uint i = 0; i< contours.size(); i++)
+	{
+		Scalar color = Scalar(255);
+		drawContours( edges, contours, i, color, CV_FILLED );
+	}
+
+	showImg(edges, "All contours", WINDOW_AUTOSIZE, 100);
+
+	// fill-in all small contours with zeros
+	for (size_t i=0; i < small_blobs.size(); ++i) {
+	    drawContours(edges, contours, small_blobs[i], Scalar(0), CV_FILLED, 8);
+	}
+
+	//Check if white pixels (road) are in the center bottom of the image
+	Range h_rows(houghP.rows * 0.8, houghP.rows);
+	Range h_cols(houghP.cols * 0.45, houghP.cols * 0.55);
+	temp = edges(h_rows, h_cols);
+
+	if(countNonZero(temp) < (houghP.rows * 0.2)*(houghP.cols * 0.1) * 0.9)
+	{
+		Mat inv_edges = 255 - edges;
+
+		//Compare road pixels of both segmented images
+		if(countNonZero(inv_edges) > countNonZero(temp))
+		{
+			edges = inv_edges;
+		}
+	}
+
+	showImg(edges, "Selected contours", WINDOW_AUTOSIZE, 100);
+
+	/*********** weighted average of the images intensities ***********/
+
+	Mat planes[3];
+	Mat old_image, new_image;
+
+	split( src(rows,cols), planes);
+	old_image = (xHSV) ? planes[img.dominantChannel] * (255.0/180.0): planes[img.dominantChannel];
+
+	imshow("old_image", old_image);
+
+	addWeighted(old_image, 1.0/3.0, otsu_road, 1.0/3.0, 0, new_image);
+	addWeighted(new_image, 1.0, edges, 1.0/3.0, 0, new_image);
+
+	imshow("Result", new_image);
+	waitKey(1000000);
 
 	return 0;
 }

@@ -11,7 +11,7 @@
 using namespace cv;
 using namespace std;
 
-void showImg(Mat img, char * window, int type, int time)
+void showImg(Mat img, const char * window, int type, int time)
 {
 	namedWindow( window, type );
 	imshow( window, img );
