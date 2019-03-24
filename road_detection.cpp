@@ -42,7 +42,7 @@ int main( int argc, char** argv )
 /********************** Load image and pre-processing ******************************/
 
 	//Read Image
-	const char* filename = argc >=2 ? argv[1] : "data/iteso0.png";
+	const char* filename = argc >=2 ? argv[1] : "data/pixy5.png";
 	src = imread( filename, IMREAD_COLOR );
 
 	if(src.empty())
@@ -53,7 +53,7 @@ int main( int argc, char** argv )
 
 	#ifdef DEBUG
 		//Display image
-		showImg( &src, window_full, WINDOW_AUTOSIZE, 100);
+		showImg( src, window_full, WINDOW_AUTOSIZE, 100);
 	#endif
 
 	//Image resizing
@@ -62,6 +62,7 @@ int main( int argc, char** argv )
 	  float ratio = src.rows / (float)SIZE_Y;
 	  uint16_t new_cols = src.cols / ratio;
 	  resize(src, src, Size(new_cols,SIZE_Y), 0, 0, INTER_LANCZOS4);
+	  imwrite( "data/iteso_0.png", src );
 	}
 
 	display = src.clone();
@@ -83,7 +84,7 @@ int main( int argc, char** argv )
 	showImg(display, window_display, WINDOW_AUTOSIZE, 100);
 
 	#ifdef DEBUG
-		showImg(&dst, window_gauss, WINDOW_AUTOSIZE, 100);
+		showImg(dst, window_gauss, WINDOW_AUTOSIZE, 100);
 	#endif
 
 
@@ -135,7 +136,10 @@ int main( int argc, char** argv )
 	GaussianBlur( houghP, houghP, Size(5, 5), 0, 0);
 
 	// Edge detection
-	Canny(houghP, houghP, 150, 250, 3); //25, 100, 3
+
+	/* For homogeneous roads 15, 75, 3*/
+	/* For no homogeneous roads 150, 250, 3*/
+	Canny(houghP, houghP, 15, 75, 3); //25, 100, 3
 
     imshow("Canny", houghP);
 
@@ -143,7 +147,21 @@ int main( int argc, char** argv )
     vector<Vec4i> linesP; // will hold the results of the detection
 
 
-    HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 20 ); // runs the actual detection 10, CV_PI/360, 80, 20, 20
+    /*
+     *  Probabilistic Hough Line Transform arguments:
+     *
+     *
+     * 	dst: Output of the edge detector. It should be a grayscale image
+     * 	lines: A vector that will store the parameters (x_{start}, y_{start}, x_{end}, y_{end}) of the detected lines
+     * 	rho : The resolution of the parameter r in pixels. We use 1 pixel.
+     * 	theta: The resolution of the parameter \theta in radians. We use 1 degree (CV_PI/180)
+     * 	threshold: The minimum number of intersections to “detect” a line
+     * 	minLinLength: The minimum number of points that can form a line. Lines with less than this number of points are disregarded.
+     * 	maxLineGap: The maximum gap between two points to be considered in the same line.
+     */
+
+
+    HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 10, 10 ); // runs the actual detection 10, CV_PI/360, 80, 20, 20
 
     // Draw the lines
     for( size_t i = 0; i < linesP.size(); i++ )
@@ -165,7 +183,8 @@ int main( int argc, char** argv )
 	findContours( houghP, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
 
 	// Find indices of contours whose area is less than `threshold`
-	for (size_t i=0; i<contours.size(); ++i) {
+	for (size_t i=0; i<contours.size(); ++i)
+	{
 		contour_area = contourArea(contours[i]) ;
 		if ( contour_area < 250)
 			small_blobs.push_back(i);
