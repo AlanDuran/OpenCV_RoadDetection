@@ -138,8 +138,8 @@ int main( int argc, char** argv )
 	// Edge detection
 
 	/* For homogeneous roads 15, 75, 3*/
-	/* For no homogeneous roads 150, 250, 3*/
-	Canny(houghP, houghP, 15, 75, 3); //25, 100, 3
+	/* For no homogeneous roads 150, 240, 3*/
+	Canny(houghP, houghP, 15, 75, 3);
 
     imshow("Canny", houghP);
 
@@ -161,7 +161,7 @@ int main( int argc, char** argv )
      */
 
 
-    HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 10, 10 ); // runs the actual detection 10, CV_PI/360, 80, 20, 20
+    HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 20 ); // runs the actual detection 10, CV_PI/360, 80, 20, 20
 
     // Draw the lines
     for( size_t i = 0; i < linesP.size(); i++ )
@@ -190,38 +190,62 @@ int main( int argc, char** argv )
 			small_blobs.push_back(i);
 	}
 
-	Mat edges = Mat::zeros(houghP.size(), CV_8UC1);
+	temp = Mat::zeros(houghP.size(), CV_8UC1);
 
 	for (uint i = 0; i< contours.size(); i++)
 	{
 		Scalar color = Scalar(255);
-		drawContours( edges, contours, i, color, CV_FILLED );
+		drawContours( temp, contours, i, color, CV_FILLED );
 	}
 
-	showImg(edges, "All contours", WINDOW_AUTOSIZE, 100);
+	showImg(temp, "All contours", WINDOW_AUTOSIZE, 100);
 
 	// fill-in all small contours with zeros
 	for (size_t i=0; i < small_blobs.size(); ++i) {
-	    drawContours(edges, contours, small_blobs[i], Scalar(0), CV_FILLED, 8);
+	    drawContours(temp, contours, small_blobs[i], Scalar(0), CV_FILLED, 8);
 	}
 
-	//Check if white pixels (road) are in the center bottom of the image
-	Range h_rows(houghP.rows * 0.8, houghP.rows);
-	Range h_cols(houghP.cols * 0.45, houghP.cols * 0.55);
-	temp = edges(h_rows, h_cols);
+	showImg(temp, "no small", WINDOW_AUTOSIZE, 100);
 
-	if(countNonZero(temp) < (houghP.rows * 0.2)*(houghP.cols * 0.1) * 0.9)
+	temp = 255 - temp;
+	showImg(temp, "inv", WINDOW_AUTOSIZE, 100);
+	findContours( temp, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+
+	// get the moments
+	vector<Moments> mu(contours.size());
+	for( int i = 0; i<contours.size(); i++ )
 	{
-		Mat inv_edges = 255 - edges;
+		mu[i] = moments( contours[i], false );
+	}
 
-		//Compare road pixels of both segmented images
-		if(countNonZero(inv_edges) > countNonZero(temp))
+	// get the centroids and calculate distances to bottom center of the image.
+	double dist[contours.size()];
+	int countourIndex;
+
+	for( int i = 0; i<contours.size(); i++)
+	{
+		if(contourArea(contours[i]) > 50)
 		{
-			edges = inv_edges;
+			double cx = mu[i].m10/mu[i].m00;
+			double cy = mu[i].m01/mu[i].m00;
+			dist[i] = ((SIZE_Y -  cy)*(SIZE_Y - cy))
+					+ (((SIZE_X / 2) - cx) * ((SIZE_X / 2) - cx));
+		}
+
+		else
+		{
+			dist[i] = 100000;
 		}
 	}
 
-	showImg(edges, "Selected contours", WINDOW_AUTOSIZE, 100);
+	//select minimun distance of centroid
+	countourIndex = distance(dist,min_element(dist, dist + contours.size()));
+
+	//draw selected blob
+	Mat edges = Mat::zeros(houghP.size(), CV_8UC1);
+	drawContours( edges, contours, countourIndex, Scalar(255), CV_FILLED );
+
+	showImg(edges, "Selected contour", WINDOW_AUTOSIZE, 100);
 
 	/*********** weighted average of the images intensities ***********/
 
