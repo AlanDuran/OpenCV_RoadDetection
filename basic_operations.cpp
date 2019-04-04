@@ -38,6 +38,7 @@ void getDominantHistogram(img_type *src, int type)
 
 	if(type == true)
 	{
+		equalizeHist(src->img_planes[0],src->img_planes[0]);
 		src->img_hist[0] = getHistogram(src->img_planes[0],180);
 		src->img_hist[1] = getHistogram(src->img_planes[1],256);
 		src->img_hist[2] = getHistogram(src->img_planes[2],256);
@@ -46,6 +47,9 @@ void getDominantHistogram(img_type *src, int type)
 
 	else
 	{
+		equalizeHist(src->img_planes[0],src->img_planes[0]);
+		equalizeHist(src->img_planes[1],src->img_planes[1]);
+		equalizeHist(src->img_planes[2],src->img_planes[2]);
 		src->img_hist[0] = getHistogram(src->img_planes[0],256);
 		src->img_hist[1] = getHistogram(src->img_planes[1],256);
 		src->img_hist[2] = getHistogram(src->img_planes[2],256);

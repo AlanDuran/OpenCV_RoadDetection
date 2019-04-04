@@ -13,6 +13,8 @@
 
 #define DEBUG
 #define xHSV			1
+#define FIND_HORIZON	1
+#define HORIZON_SIZE	0.7
 
 #define KERNEL_WIDTH	41
 #define KERNEL_HEIGHT	41
@@ -20,6 +22,9 @@
 #define SIGMA_Y			7
 #define SIZE_X			320
 #define SIZE_Y			200
+
+#define CANNY_LOW		75 /* Homogeneous roads 15 - 25, no homogeneous roads 75 - 100*/
+#define CANNY_HIGH		150 /* Homogeneous roads 75 - 100, no homogeneous roads 150 - 200*/
 
 using namespace std;
 using namespace cv;
@@ -30,6 +35,8 @@ int main( int argc, char** argv )
 
 	//Read video
 	VideoCapture cap("data/iteso.mp4");
+	VideoWriter video;
+	bool videoFlag = false;
 
 	if(!cap.isOpened()){
 	    cout << "Error opening video stream or file" << endl;
@@ -57,6 +64,13 @@ int main( int argc, char** argv )
 
 		display = src.clone();
 
+		if(videoFlag)
+		{
+			// Define the codec and create VideoWriter object.The output is stored in 'outcpp.avi' file.
+			video = VideoWriter("data/fixed_horizon.avi",CV_FOURCC('M','J','P','G'),25, Size(display.cols,display.rows),0);
+			videoFlag = false;
+		}
+
 		#ifdef DEBUG
 			Mat display_otsu = Mat::zeros(display.size(), CV_8UC1);
 			Mat display_canny = Mat::zeros(display.size(), CV_8UC1);
@@ -74,28 +88,37 @@ int main( int argc, char** argv )
 		GaussianBlur( src, dst, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 
 		//Select image fraction to analyze
-		Range rows(0, src.rows * 0.6);
+		Range rows(0, src.rows * HORIZON_SIZE);
 		Range cols(0, src.cols);
 		temp = dst(rows,cols);
 
-	/******************* Histogram calculation and selection ****************************/
+/******************* Histogram calculation and selection ****************************/
 
 		img.img = temp;
 		//Calculate an histogram for each channel, store it in img.img_hist[] and select dominant channel
 		getDominantHistogram(&img, xHSV);
 
-	/**************** Horizon detection *************************************************/
+/**************** Horizon detection *************************************************/
 
+		uint16_t horizon;
 		uint16_t limit = (xHSV) ? 180 : 256;
 
-		uint16_t horizon = get_horizon(img.img_planes[img.dominantChannel], limit);
-		horizon = src.rows - horizon - src.rows*0.4;
+		if(FIND_HORIZON)
+		{
+			horizon = get_horizon(img.img_planes[img.dominantChannel], limit);
+			horizon = src.rows - horizon - src.rows * (1 - HORIZON_SIZE);
+		}
+
+		else
+		{
+			horizon = src.rows * 0.50;
+		}
 
 		temp = display.clone();
 		line( temp, Point(0,horizon), Point(src.cols,horizon),Scalar( 0, 0, 255 ), 2, 1);
 		imshow("original_image", temp);
 
-	/******************** Road detection with Otsu **************************************/
+/******************** Road detection with Otsu **************************************/
 
 		Mat otsu_road;
 
@@ -107,19 +130,17 @@ int main( int argc, char** argv )
 		img.img = temp;
 		otsu_road = get_roadImage(&img,xHSV);
 
-	/******** Improvements with Canny detector and Hough Line transform *****************/
+/******** Improvements with Canny detector and Hough Line transform *****************/
 
 		Mat houghP;
 
 		houghP = display(rows,cols).clone();
 		//cvtColor(houghP,houghP,CV_BGR2GRAY);
+		//equalizeHist(houghP,houghP);
 		GaussianBlur( houghP, houghP, Size(5, 5), 0, 0);
 
 		// Edge detection
-
-		/* For homogeneous roads 15, 75, 3*/
-		/* For no homogeneous roads 150, 240, 3*/
-		Canny(houghP, houghP, 100, 200, 3);
+		Canny(houghP, houghP, CANNY_LOW, CANNY_HIGH, 3);
 
 		#ifdef DEBUG
 			houghP.copyTo(display_canny(rows,cols));
@@ -142,7 +163,7 @@ int main( int argc, char** argv )
 		 * 	maxLineGap: The maximum gap between two points to be considered in the same line.
 		 */
 
-		HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 15, 30 ); // runs the actual detection 10, CV_PI/360, 80, 20, 20
+		HoughLinesP(houghP, linesP, 10, CV_PI/360, 80, 20, 30 ); // runs the actual detection 10, CV_PI/180, 80, 15, 30
 
 		// Draw the lines
 		for( size_t i = 0; i < linesP.size(); i++ )
@@ -155,7 +176,8 @@ int main( int argc, char** argv )
 			houghP.copyTo(display_lines(rows,cols));
 			imshow("Hough Lines", display_lines);
 		#endif
-	/************************* Blob operations *****************************************/
+
+/************************* Blob operations ******************************************/
 
 		vector<vector<Point> > contours;
 		vector<Vec4i> hierarchy;
@@ -221,7 +243,8 @@ int main( int argc, char** argv )
 		//draw selected blob
 		Mat edges = Mat::zeros(houghP.size(), CV_8UC1);
 		drawContours( edges, contours, countourIndex, Scalar(255), CV_FILLED );
-		/*********** weighted average of the images intensities ***********/
+
+/********************* weighted average of the images intensities *************************/
 
 		Mat planes[3];
 		Mat old_image, new_image;
@@ -239,18 +262,21 @@ int main( int argc, char** argv )
 		addWeighted(old_image, 1.0/3.0, otsu_road, 1.0/3.0, 0, new_image);
 		addWeighted(new_image, 1.0, edges, 1.0/3.0, 0, new_image);
 
-
 		Mat detected_road = Mat::zeros(display.size(), CV_8UC1);
 		new_image.copyTo(detected_road(rows,cols));
+		//imshow("Grayscale", old_image);
 		imshow("Detected road", detected_road);
-		waitKey(25);
+		//video.write(detected_road);
+		waitKey(50);
 	}
 
+	waitKey(100);
 	// When everything done, release the video capture object
-	  cap.release();
+	cap.release();
+	video.release();
 
-	  // Closes all the frames
-	  destroyAllWindows();
+	// Closes all the frames
+	destroyAllWindows();
 
 	return 0;
 }

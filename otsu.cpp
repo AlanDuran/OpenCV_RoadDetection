@@ -11,7 +11,9 @@
 using namespace cv;
 using namespace std;
 
-#define N_DIV 10
+#define N_DIV 	15
+#define X_SEC	0.15
+#define Y_SEC	0.45
 
 uint8_t get_threshold(Mat hist, int limit)
 {
@@ -147,10 +149,10 @@ Mat get_roadImage(img_type *src, int type)
 	threshold( src->img_planes[src->dominantChannel], road[0], thold, 255, THRESH_BINARY);
 
 	//Check if white pixels (road) are in the center bottom of the image
-	Range rows(src->img.rows * 0.8, src->img.rows);
-	Range cols(src->img.cols * 0.45, src->img.cols * 0.55);
+	Range rows(src->img.rows * (1 - Y_SEC), src->img.rows); //0.8
+	Range cols(src->img.cols * (0.50 - X_SEC), src->img.cols * (0.50 + X_SEC)); //0.45 - 0.55
 
-	if(countNonZero(road[0](rows,cols)) < (src->img.rows * 0.2)*(src->img.cols * 0.1) * 0.9)
+	if(countNonZero(road[0](rows,cols)) < (src->img.rows * Y_SEC)*(src->img.cols * X_SEC) * 0.65)
 	{
 		//Detect road with negated image
 		Mat temp = src->img_planes[src->dominantChannel].clone();
