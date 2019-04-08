@@ -86,12 +86,6 @@ uint16_t get_horizon(Mat image, int limit)
 	Mat rec;
 	Mat temp[N_DIV];
 
-	/*
-	char copy[] = "Imagen copia";
-	namedWindow( copy, WINDOW_AUTOSIZE );
-	imshow( copy, image );
-	waitKey (100);
-*/
 	uint8_t tholds[N_DIV];
 	uint16_t accum[N_DIV] = {0};
 	double pdiff[N_DIV];

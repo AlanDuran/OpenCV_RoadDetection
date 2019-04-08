@@ -23,6 +23,6 @@ void showImg(cv::Mat img, const char * window, int type, int time);
 cv::Mat getHistogram(cv::Mat src, int histSize);
 void drawHistogram(cv::Mat src, cv::Mat dst, int histSize, cv::Scalar color);
 void getDominantHistogram(img_type *src, int type);
-
+cv::Mat getNearestBlob(cv::Mat src, int coordX, int coordY, int minArea);
 
 #endif /* SRC_BASIC_OPERATIONS_H_ */

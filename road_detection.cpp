@@ -35,8 +35,6 @@ int main( int argc, char** argv )
 
 	//Read video
 	VideoCapture cap("data/iteso.mp4");
-	VideoWriter video;
-	bool videoFlag = false;
 
 	if(!cap.isOpened()){
 	    cout << "Error opening video stream or file" << endl;
@@ -63,13 +61,6 @@ int main( int argc, char** argv )
 		}
 
 		display = src.clone();
-
-		if(videoFlag)
-		{
-			// Define the codec and create VideoWriter object.The output is stored in 'outcpp.avi' file.
-			video = VideoWriter("data/fixed_horizon.avi",CV_FOURCC('M','J','P','G'),25, Size(display.cols,display.rows),0);
-			videoFlag = false;
-		}
 
 		#ifdef DEBUG
 			Mat display_otsu = Mat::zeros(display.size(), CV_8UC1);
@@ -181,76 +172,35 @@ int main( int argc, char** argv )
 
 		vector<vector<Point> > contours;
 		vector<Vec4i> hierarchy;
-		vector<int> small_blobs;
-		double contour_area;
 
 		findContours( houghP, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
 
-		// Find indices of contours whose area is less than `threshold`
-		for (size_t i=0; i<contours.size(); ++i)
-		{
-			contour_area = contourArea(contours[i]) ;
-			if ( contour_area < 250)
-				small_blobs.push_back(i);
-		}
-
 		temp = Mat::zeros(houghP.size(), CV_8UC1);
 
+		//Fill contours
 		for (uint i = 0; i< contours.size(); i++)
 		{
 			Scalar color = Scalar(255);
 			drawContours( temp, contours, i, color, CV_FILLED );
 		}
 
-		// fill-in all small contours with zeros
-		for (size_t i=0; i < small_blobs.size(); ++i) {
-			drawContours(temp, contours, small_blobs[i], Scalar(0), CV_FILLED, 8);
-		}
-
+		//Negate image
 		temp = 255 - temp;
-		findContours( temp, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
-
-		// get the moments
-		vector<Moments> mu(contours.size());
-		for( int i = 0; i<contours.size(); i++ )
-		{
-			mu[i] = moments( contours[i], false );
-		}
-
-		// get the centroids and calculate distances to bottom center of the image.
-		double dist[contours.size()];
-		int countourIndex;
-
-		for( int i = 0; i<contours.size(); i++)
-		{
-			if(contourArea(contours[i]) > 250)
-			{
-				double cx = mu[i].m10/mu[i].m00;
-				double cy = mu[i].m01/mu[i].m00;
-				dist[i] = ((SIZE_Y -  cy)*(SIZE_Y - cy))
-						+ (((SIZE_X / 2) - cx) * ((SIZE_X / 2) - cx));
-			}
-
-			else
-			{
-				dist[i] = 100000;
-			}
-		}
-
-		//select minimun distance of centroid
-		countourIndex = distance(dist,min_element(dist, dist + contours.size()));
-
-		//draw selected blob
-		Mat edges = Mat::zeros(houghP.size(), CV_8UC1);
-		drawContours( edges, contours, countourIndex, Scalar(255), CV_FILLED );
+		Mat edges = getNearestBlob(temp, SIZE_X, SIZE_Y, 250);
 
 /********************* weighted average of the images intensities *************************/
 
-		Mat planes[3];
+		vector<Mat> planes;
 		Mat old_image, new_image;
 
+		//cvtColor(display(rows,cols),old_image,CV_BGR2GRAY);
+
+		/*
 		split( src(rows,cols), planes);
 		old_image = (xHSV) ? planes[img.dominantChannel] * (255.0/180.0): planes[img.dominantChannel];
+		 */
+
+		old_image = img.img_planes[img.dominantChannel];
 
 		#ifdef DEBUG
 			otsu_road.copyTo(display_otsu(rows,cols));
@@ -265,15 +215,19 @@ int main( int argc, char** argv )
 		Mat detected_road = Mat::zeros(display.size(), CV_8UC1);
 		new_image.copyTo(detected_road(rows,cols));
 		//imshow("Grayscale", old_image);
-		imshow("Detected road", detected_road);
+		imshow("w road", detected_road);
+		threshold( detected_road, detected_road, 100, 255, THRESH_BINARY);
+		imshow("dirty road", detected_road);
+		detected_road = getNearestBlob(detected_road, SIZE_X, SIZE_Y, 50);
+		imshow("clean road", detected_road);
+
 		//video.write(detected_road);
-		waitKey(50);
+		waitKey(20);
 	}
 
 	waitKey(100);
 	// When everything done, release the video capture object
 	cap.release();
-	video.release();
 
 	// Closes all the frames
 	destroyAllWindows();

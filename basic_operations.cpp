@@ -88,3 +88,47 @@ void drawHistogram(Mat img_hist, Mat dst, int histSize, Scalar color)
 			  Point( bin_w*(i), dst.rows - cvRound(temp.at<float>(i)) ), color, 2, 8, 0);
 	}
 }
+
+Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
+{
+	vector<vector<Point> > contours;
+	vector<Vec4i> hierarchy;
+
+	findContours( src, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+
+	// get the moments of the contours
+	vector<Moments> mu(contours.size());
+	for( unsigned int i = 0; i<contours.size(); i++ )
+	{
+		mu[i] = moments( contours[i], false );
+	}
+
+	// get the centroids and calculate distances to bottom center of the image.
+	double dist[contours.size()];
+	int countourIndex;
+
+	for( unsigned int i = 0; i<contours.size(); i++)
+	{
+		if(contourArea(contours[i]) > minArea) //Area threshold
+		{
+			double cx = mu[i].m10/mu[i].m00;
+			double cy = mu[i].m01/mu[i].m00;
+			dist[i] = ((coordY -  cy)*(coordY))
+					+ (((coordX / 2) - cx) * ((coordX / 2) - cx));
+		}
+
+		else
+		{
+			dist[i] = 100000; //Arbitrary distance
+		}
+	}
+
+	//select minimun distance of centroid
+	countourIndex = distance(dist,min_element(dist, dist + contours.size()));
+
+	//draw selected blob
+	Mat edges = Mat::zeros(src.size(), CV_8UC1);
+	drawContours( edges, contours, countourIndex, Scalar(255), CV_FILLED );
+
+	return edges;
+}
