@@ -12,7 +12,7 @@
 #include "basic_operations.h"
 
 uint8_t get_threshold(cv::Mat src, int limit);
-uint16_t get_horizon(cv::Mat src, int limit);
-cv::Mat get_roadImage(img_type *src, int type);
+uint16_t get_horizon(cv::Mat src);
+cv::Mat get_roadImage(img_type *src);
 
 #endif /* SRC_OTSU_H_ */

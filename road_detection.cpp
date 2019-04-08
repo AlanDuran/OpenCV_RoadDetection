@@ -12,19 +12,18 @@
 #include "basic_operations.h"
 
 #define DEBUG
-#define xHSV			1
 #define FIND_HORIZON	1
 #define HORIZON_SIZE	0.7
 
 #define KERNEL_WIDTH	41
 #define KERNEL_HEIGHT	41
-#define SIGMA_X 		7
-#define SIGMA_Y			7
+#define SIGMA_X 		3
+#define SIGMA_Y			3
 #define SIZE_X			320
 #define SIZE_Y			200
 
-#define CANNY_LOW		75 /* Homogeneous roads 15 - 25, no homogeneous roads 75 - 100*/
-#define CANNY_HIGH		150 /* Homogeneous roads 75 - 100, no homogeneous roads 150 - 200*/
+#define CANNY_LOW		25 /* Homogeneous roads 15 - 25, no homogeneous roads 75 - 100*/
+#define CANNY_HIGH		75 /* Homogeneous roads 75 - 100, no homogeneous roads 150 - 200*/
 
 using namespace std;
 using namespace cv;
@@ -60,6 +59,7 @@ int main( int argc, char** argv )
 		  resize(src, src, Size(new_cols,SIZE_Y), 0, 0, INTER_LANCZOS4);
 		}
 
+		//flip(src,src,-1);
 		display = src.clone();
 
 		#ifdef DEBUG
@@ -69,34 +69,25 @@ int main( int argc, char** argv )
 			Mat display_edges = Mat::zeros(display.size(), CV_8UC1);
 		#endif
 
-		//Change color space
-		if(xHSV == true)
-		{
-			cvtColor(src, src, CV_BGR2HSV);
-		}
+		//0. Change color space and remove shadows
+		src = removeShadows(src,&img);
 
 		//Smoothing image with Gaussian filter
 		GaussianBlur( src, dst, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 
-		//Select image fraction to analyze
-		Range rows(0, src.rows * HORIZON_SIZE);
-		Range cols(0, src.cols);
-		temp = dst(rows,cols);
-
-/******************* Histogram calculation and selection ****************************/
-
-		img.img = temp;
-		//Calculate an histogram for each channel, store it in img.img_hist[] and select dominant channel
-		getDominantHistogram(&img, xHSV);
-
 /**************** Horizon detection *************************************************/
 
 		uint16_t horizon;
-		uint16_t limit = (xHSV) ? 180 : 256;
+
+		//Select image fraction to analyze
+		Range rows(0, src.rows * HORIZON_SIZE);
+		Range cols(0, src.cols);
 
 		if(FIND_HORIZON)
 		{
-			horizon = get_horizon(img.img_planes[img.dominantChannel], limit);
+			temp = img.channel[0](rows,cols);
+			GaussianBlur( temp, temp, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
+			horizon = get_horizon(temp);
 			horizon = src.rows - horizon - src.rows * (1 - HORIZON_SIZE);
 		}
 
@@ -116,16 +107,16 @@ int main( int argc, char** argv )
 		//Cut the image from horizon to the bottom
 		rows.start = horizon;
 		rows.end = src.rows;
-		temp = dst(rows,cols);
 
-		img.img = temp;
-		otsu_road = get_roadImage(&img,xHSV);
+		img.img = dst(rows,cols).clone();
+		img.hist = getHistogram(img.img);
+		otsu_road = get_roadImage(&img);
 
 /******** Improvements with Canny detector and Hough Line transform *****************/
 
 		Mat houghP;
 
-		houghP = display(rows,cols).clone();
+		houghP = src(rows,cols).clone();
 		//cvtColor(houghP,houghP,CV_BGR2GRAY);
 		//equalizeHist(houghP,houghP);
 		GaussianBlur( houghP, houghP, Size(5, 5), 0, 0);
@@ -172,7 +163,6 @@ int main( int argc, char** argv )
 
 		vector<vector<Point> > contours;
 		vector<Vec4i> hierarchy;
-
 		findContours( houghP, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
 
 		temp = Mat::zeros(houghP.size(), CV_8UC1);
@@ -193,16 +183,10 @@ int main( int argc, char** argv )
 		vector<Mat> planes;
 		Mat old_image, new_image;
 
-		//cvtColor(display(rows,cols),old_image,CV_BGR2GRAY);
-
-		/*
-		split( src(rows,cols), planes);
-		old_image = (xHSV) ? planes[img.dominantChannel] * (255.0/180.0): planes[img.dominantChannel];
-		 */
-
-		old_image = img.img_planes[img.dominantChannel];
+		old_image = src(rows,cols);
 
 		#ifdef DEBUG
+			imshow("grayscale", src);
 			otsu_road.copyTo(display_otsu(rows,cols));
 			imshow("Otsu", display_otsu);
 			edges.copyTo(display_edges(rows,cols));
@@ -214,15 +198,14 @@ int main( int argc, char** argv )
 
 		Mat detected_road = Mat::zeros(display.size(), CV_8UC1);
 		new_image.copyTo(detected_road(rows,cols));
-		//imshow("Grayscale", old_image);
+
 		imshow("w road", detected_road);
 		threshold( detected_road, detected_road, 100, 255, THRESH_BINARY);
-		imshow("dirty road", detected_road);
 		detected_road = getNearestBlob(detected_road, SIZE_X, SIZE_Y, 50);
-		imshow("clean road", detected_road);
+		imshow("detected road", detected_road);
 
 		//video.write(detected_road);
-		waitKey(20);
+		waitKey(50);
 	}
 
 	waitKey(100);

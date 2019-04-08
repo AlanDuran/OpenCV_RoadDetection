@@ -11,9 +11,11 @@
 using namespace cv;
 using namespace std;
 
-#define N_DIV 	15
+#define N_DIV 	10
 #define X_SEC	0.15
 #define Y_SEC	0.45
+
+#define HIST_SIZE 256
 
 uint8_t get_threshold(Mat hist, int limit)
 {
@@ -76,12 +78,11 @@ uint8_t get_threshold(Mat hist, int limit)
 
 		intra_cv[threshold] = q[0]*cv[0] + q[1]*cv[1];
 	}
-
 	//Get index of min element
 	return distance(intra_cv,min_element(intra_cv, intra_cv + limit));
 }
 
-uint16_t get_horizon(Mat image, int limit)
+uint16_t get_horizon(Mat image)
 {
 	Mat rec;
 	Mat temp[N_DIV];
@@ -96,17 +97,19 @@ uint16_t get_horizon(Mat image, int limit)
 	//Calculate thresholds for each segment
 	for(i = 0; i < N_DIV; i++)
 	{
+		int limit = 255;
 		Mat hist;
-		int histSize = 256;
-		float range[] = { 0, 255 }; //the upper boundary is exclusive
-		const float* histRange = { range };
-		bool uniform = true, accumulate = false;
-
 		Range rows(i*segment, (i + 1)*segment);
 		Range cols(0,image.cols);
 		temp[N_DIV - i - 1] = image(rows,cols);
 
-		calcHist(&temp[N_DIV - i - 1], 1, CV_HIST_ARRAY, Mat(), hist, 1, &histSize, &histRange, uniform, accumulate );
+		hist = getHistogram(temp[N_DIV - i - 1]);
+
+		while(hist.at<float>(limit-1) == 0)
+		{
+			limit--;
+		}
+
 		tholds[N_DIV - i - 1] = get_threshold(hist, limit);
 	}
 
@@ -130,17 +133,21 @@ uint16_t get_horizon(Mat image, int limit)
 	return segment * distance(pdiff,max_element(pdiff, pdiff + N_DIV));
 }
 
-Mat get_roadImage(img_type *src, int type)
+Mat get_roadImage(img_type *src)
 {
 	Mat road[2];
 	uint8_t selected_img = 0;
 
 	//Detect road with received image
-	uint16_t limit = (type) ? 180 : 256;
-	getDominantHistogram(src, type);
+	uint16_t limit = HIST_SIZE;
 
-	uint8_t thold = get_threshold(src->img_hist[src->dominantChannel], limit);
-	threshold( src->img_planes[src->dominantChannel], road[0], thold, 255, THRESH_BINARY);
+	while(src->hist.at<float>(limit-1) == 0)
+	{
+		limit--;
+	}
+
+	uint8_t thold = get_threshold(src->hist, limit);
+	threshold( src->img, road[0], thold, 255, THRESH_BINARY);
 
 	//Check if white pixels (road) are in the center bottom of the image
 	Range rows(src->img.rows * (1 - Y_SEC), src->img.rows); //0.8
@@ -149,10 +156,10 @@ Mat get_roadImage(img_type *src, int type)
 	if(countNonZero(road[0](rows,cols)) < (src->img.rows * Y_SEC)*(src->img.cols * X_SEC) * 0.65)
 	{
 		//Detect road with negated image
-		Mat temp = src->img_planes[src->dominantChannel].clone();
+		Mat temp = src->img.clone();
 		temp = limit - temp;
 
-		Mat hist = getHistogram(temp,limit);
+		Mat hist = getHistogram(temp);
 
 		thold = get_threshold(hist, limit);
 		threshold( temp, road[1], thold, 255, THRESH_BINARY);
@@ -164,7 +171,7 @@ Mat get_roadImage(img_type *src, int type)
 		}
 
 		{
-			src->img_planes[src->dominantChannel] = limit - src->img_planes[src->dominantChannel];
+			src->img = limit - src->img;
 			selected_img = 1;
 		}
 

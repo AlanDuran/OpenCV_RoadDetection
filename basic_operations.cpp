@@ -11,6 +11,8 @@
 using namespace cv;
 using namespace std;
 
+#define HIST_SIZE 256
+
 void showImg(Mat img, const char * window, int type, int time)
 {
 	namedWindow( window, type );
@@ -18,75 +20,56 @@ void showImg(Mat img, const char * window, int type, int time)
 	waitKey (time);
 }
 
-Mat getHistogram(Mat img_planes, int histSize)
+Mat getHistogram(Mat src)
 {
 	Mat img_hist;
+	int histSize = HIST_SIZE;
 
 	float range[] = { 0, (float)histSize - 1}; //the upper boundary is exclusive
 	const float* histRange = { range };
 	bool uniform = true, accumulate = false;
 
-	calcHist( &img_planes, 1, CV_HIST_ARRAY, Mat(), img_hist, 1, &histSize, &histRange, uniform, accumulate );
+	calcHist( &src, 1, CV_HIST_ARRAY, Mat(), img_hist, 1, &histSize, &histRange, uniform, accumulate );
 
 	return img_hist;
 }
 
-void getDominantHistogram(img_type *src, int type)
-{
-	Mat temp = src->img;
-	split( temp, src->img_planes );
-
-	if(type == true)
-	{
-		equalizeHist(src->img_planes[0],src->img_planes[0]);
-		src->img_hist[0] = getHistogram(src->img_planes[0],180);
-		src->img_hist[1] = getHistogram(src->img_planes[1],256);
-		src->img_hist[2] = getHistogram(src->img_planes[2],256);
-		src->dominantChannel = 0; //Channel H
-	}
-
-	else
-	{
-		equalizeHist(src->img_planes[0],src->img_planes[0]);
-		equalizeHist(src->img_planes[1],src->img_planes[1]);
-		equalizeHist(src->img_planes[2],src->img_planes[2]);
-		src->img_hist[0] = getHistogram(src->img_planes[0],256);
-		src->img_hist[1] = getHistogram(src->img_planes[1],256);
-		src->img_hist[2] = getHistogram(src->img_planes[2],256);
-
-		double areas[3] = {0,0,0};
-		int i, histSize = 256;
-
-		//Histogram area comparison
-		for(i = 0; i < histSize - 1; i++ )
-		{
-		  areas[0] += i*(double)src->img_hist[0].at<float>(i);
-		  areas[1] += i*(double)src->img_hist[1].at<float>(i);
-		  areas[2] += i*(double)src->img_hist[2].at<float>(i);
-		}
-
-		printf("\n\narea r = %f\narea g = %f \narea b = %f",areas[0],areas[1],areas[2]);
-		fflush(stdout);
-
-		//Get index of max element
-		src->dominantChannel = distance(areas,max_element(areas, areas + 3));
-	}
-}
-
-void drawHistogram(Mat img_hist, Mat dst, int histSize, Scalar color)
+void drawHistogram(Mat img_hist, Mat dst, Scalar color)
 {
 	Mat temp;
 
 	normalize(img_hist, temp, 0, dst.rows, NORM_MINMAX, -1, Mat() );
 
-	int bin_w = cvRound( (double) dst.cols/256 );
+	int bin_w = cvRound( (double) dst.cols/HIST_SIZE );
 	uint16_t i;
 
-	for(i = 1; i < histSize; i++ )
+	for(i = 1; i < HIST_SIZE; i++ )
 	{
 		line( dst, Point( bin_w*(i-1), dst.rows - cvRound(temp.at<float>(i-1)) ),
 			  Point( bin_w*(i), dst.rows - cvRound(temp.at<float>(i)) ), color, 2, 8, 0);
 	}
+}
+
+Mat removeShadows(Mat src, img_type *img)
+{
+	//Convert to HSV
+	cvtColor(src, src, CV_BGR2HSV);
+	split(src, img->channel);
+
+	//src = channel[0] * (255.0/180.0);
+
+	//Set V channel to a fixed value
+	//equalizeHist(channel[2],channel[2]);
+	img->channel[2] = Mat(src.rows, src.cols, CV_8UC1, 128);//Set V
+
+	//Merge channels
+	merge(img->channel, 3, src);
+	cvtColor(src, src, CV_HSV2BGR);
+
+	//2. Convert to gray and normalize
+	cvtColor(src, src, CV_BGR2GRAY);
+	normalize(src, src, 0, 255, NORM_MINMAX, CV_8UC1);
+	return src;
 }
 
 Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
