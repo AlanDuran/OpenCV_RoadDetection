@@ -30,20 +30,6 @@ Mat getHistogram(Mat src)
 	return img_hist;
 }
 
-Mat getHistogram2(Mat src)
-{
-	Mat img_hist;
-	int histSize = 180;
-
-	float range[] = { 0, (float)histSize - 1}; //the upper boundary is exclusive
-	const float* histRange = { range };
-	bool uniform = true, accumulate = false;
-
-	calcHist( &src, 1, CV_HIST_ARRAY, Mat(), img_hist, 1, &histSize, &histRange, uniform, accumulate );
-
-	return img_hist;
-}
-
 void drawHistogram(Mat img_hist, Mat dst, Scalar color)
 {
 	Mat temp;
@@ -79,21 +65,6 @@ Mat removeShadows(Mat src, img_type *img)
 	//2. Convert to gray and normalize
 	cvtColor(src, src, CV_BGR2GRAY);
 	normalize(src, src, 0, 255, NORM_MINMAX, CV_8UC1);
-	return src;
-}
-
-Mat equalizeShadows(Mat src)
-{
-	Mat channel[3];
-
-	cvtColor(src, src, CV_BGR2HSV);
-	split(src, channel);
-
-	equalizeHist(channel[2],channel[2]);
-	merge(channel, 3, src);
-
-	cvtColor(src, src, CV_HSV2BGR);
-	cvtColor(src, src, CV_BGR2GRAY);
 	return src;
 }
 

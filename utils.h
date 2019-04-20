@@ -22,7 +22,5 @@ cv::Mat getHistogram(cv::Mat src);
 void drawHistogram(cv::Mat src, cv::Mat dst, cv::Scalar color);
 cv::Mat getNearestBlob(cv::Mat src, int coordX, int coordY, int minArea);
 cv::Mat removeShadows(cv::Mat src, img_type *img);
-cv::Mat equalizeShadows(cv::Mat src);
-cv::Mat getHistogram2(cv::Mat src);
 
 #endif /* SRC_UTILS_H_ */
