@@ -12,8 +12,8 @@ using namespace cv;
 using namespace std;
 
 #define N_DIV 	10
-#define X_SEC	0.15
-#define Y_SEC	0.45
+#define X_SEC	0.10
+#define Y_SEC	0.50
 
 #define HIST_SIZE 256
 
@@ -179,5 +179,6 @@ Mat get_roadImage(img_type *src)
 		temp.release();
 	}
 
+	//rectangle(road[selected_img],Point(cols.start,rows.start),Point(cols.end,rows.end),Scalar(0),1,1);
 	return road[selected_img];
 }

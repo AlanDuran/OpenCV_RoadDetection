@@ -5,25 +5,35 @@
  *      Author: alan
  */
 
-#include "basic_operations.h"
+#include "utils.h"
+
 #include <stdio.h>
+#include <termios.h>
+#include <unistd.h>
 
 using namespace cv;
 using namespace std;
 
 #define HIST_SIZE 256
 
-void showImg(Mat img, const char * window, int type, int time)
-{
-	namedWindow( window, type );
-	imshow( window, img );
-	waitKey (time);
-}
-
 Mat getHistogram(Mat src)
 {
 	Mat img_hist;
 	int histSize = HIST_SIZE;
+
+	float range[] = { 0, (float)histSize - 1}; //the upper boundary is exclusive
+	const float* histRange = { range };
+	bool uniform = true, accumulate = false;
+
+	calcHist( &src, 1, CV_HIST_ARRAY, Mat(), img_hist, 1, &histSize, &histRange, uniform, accumulate );
+
+	return img_hist;
+}
+
+Mat getHistogram2(Mat src)
+{
+	Mat img_hist;
+	int histSize = 180;
 
 	float range[] = { 0, (float)histSize - 1}; //the upper boundary is exclusive
 	const float* histRange = { range };
@@ -72,6 +82,21 @@ Mat removeShadows(Mat src, img_type *img)
 	return src;
 }
 
+Mat equalizeShadows(Mat src)
+{
+	Mat channel[3];
+
+	cvtColor(src, src, CV_BGR2HSV);
+	split(src, channel);
+
+	equalizeHist(channel[2],channel[2]);
+	merge(channel, 3, src);
+
+	cvtColor(src, src, CV_HSV2BGR);
+	cvtColor(src, src, CV_BGR2GRAY);
+	return src;
+}
+
 Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 {
 	vector<vector<Point> > contours;
@@ -102,7 +127,7 @@ Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 
 		else
 		{
-			dist[i] = 100000; //Arbitrary distance
+			dist[i] = 	1000000; //Arbitrary distance
 		}
 	}
 
@@ -115,3 +140,7 @@ Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 
 	return edges;
 }
+
+/***********************************************************************************/
+/*********** KEYBOARD **************************************************************/
+

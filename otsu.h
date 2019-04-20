@@ -9,7 +9,8 @@
 #define SRC_OTSU_H_
 
 #include <opencv2/opencv.hpp>
-#include "basic_operations.h"
+
+#include "utils.h"
 
 uint8_t get_threshold(cv::Mat src, int limit);
 uint16_t get_horizon(cv::Mat src);

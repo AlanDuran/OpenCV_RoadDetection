@@ -7,33 +7,50 @@
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+
 #include <stdio.h>
 #include "otsu.h"
-#include "basic_operations.h"
+#include "utils.h"
+#include <pthread.h>
 
 #define DEBUG
-#define FIND_HORIZON	1
+#define FIND_HORIZON	0
 #define HORIZON_SIZE	0.7
 
-#define KERNEL_WIDTH	41
-#define KERNEL_HEIGHT	41
-#define SIGMA_X 		3
-#define SIGMA_Y			3
+#define KERNEL_WIDTH	7
+#define KERNEL_HEIGHT	7
+#define SIGMA_X 		0
+#define SIGMA_Y			0
 #define SIZE_X			320
 #define SIZE_Y			200
 
-#define CANNY_LOW		25 /* Homogeneous roads 15 - 25, no homogeneous roads 75 - 100*/
+/*
+ * iteso.mp4 	--> 15 75
+ * base_aerea 	--> 75 200
+ * atras_iteso 	--> 10 50
+ */
+#define CANNY_LOW		15 /* Homogeneous roads 15 - 25, no homogeneous roads 75 - 100*/
 #define CANNY_HIGH		75 /* Homogeneous roads 75 - 100, no homogeneous roads 150 - 200*/
+
+static void* userInput_thread(void*);
 
 using namespace std;
 using namespace cv;
 
+static bool keep_running = true;
+static bool rewind_frame = false;
+static bool forward_frame = false;
+
+//Read video
+VideoCapture cap("data/iteso.mp4");
+
 int main( int argc, char** argv )
 {
-/********************** Load image and pre-processing ******************************/
+    pthread_t tId;
+    pthread_create(&tId, 0, userInput_thread, 0);
 
-	//Read video
-	VideoCapture cap("data/iteso.mp4");
+    /********************** Load image and pre-processing ******************************/
+
 
 	if(!cap.isOpened()){
 	    cout << "Error opening video stream or file" << endl;
@@ -69,7 +86,7 @@ int main( int argc, char** argv )
 			Mat display_edges = Mat::zeros(display.size(), CV_8UC1);
 		#endif
 
-		//0. Change color space and remove shadows
+		//Change color space and remove shadows
 		src = removeShadows(src,&img);
 
 		//Smoothing image with Gaussian filter
@@ -85,7 +102,7 @@ int main( int argc, char** argv )
 
 		if(FIND_HORIZON)
 		{
-			temp = img.channel[0](rows,cols);
+			temp = img.channel[0](rows,cols).clone();
 			GaussianBlur( temp, temp, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 			horizon = get_horizon(temp);
 			horizon = src.rows - horizon - src.rows * (1 - HORIZON_SIZE);
@@ -93,7 +110,7 @@ int main( int argc, char** argv )
 
 		else
 		{
-			horizon = src.rows * 0.50;
+			horizon = src.rows * 0.30;
 		}
 
 		temp = display.clone();
@@ -108,17 +125,20 @@ int main( int argc, char** argv )
 		rows.start = horizon;
 		rows.end = src.rows;
 
+		/*
+		temp = img.channel[0](rows,cols).clone();
+		GaussianBlur( temp, temp, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
+		equalizeHist(temp,temp);
+		*/
+
 		img.img = dst(rows,cols).clone();
 		img.hist = getHistogram(img.img);
 		otsu_road = get_roadImage(&img);
-
 /******** Improvements with Canny detector and Hough Line transform *****************/
 
 		Mat houghP;
 
 		houghP = src(rows,cols).clone();
-		//cvtColor(houghP,houghP,CV_BGR2GRAY);
-		//equalizeHist(houghP,houghP);
 		GaussianBlur( houghP, houghP, Size(5, 5), 0, 0);
 
 		// Edge detection
@@ -145,7 +165,7 @@ int main( int argc, char** argv )
 		 * 	maxLineGap: The maximum gap between two points to be considered in the same line.
 		 */
 
-		HoughLinesP(houghP, linesP, 10, CV_PI/360, 80, 20, 30 ); // runs the actual detection 10, CV_PI/180, 80, 15, 30
+		HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 30 ); // runs the actual detection 10, CV_PI/180, 80, 15, 30
 
 		// Draw the lines
 		for( size_t i = 0; i < linesP.size(); i++ )
@@ -183,7 +203,9 @@ int main( int argc, char** argv )
 		vector<Mat> planes;
 		Mat old_image, new_image;
 
-		old_image = src(rows,cols);
+		cvtColor(display(rows,cols),old_image,CV_BGR2GRAY);
+		//old_image = img.channel[0](rows,cols) * (255.0/180.0);
+		equalizeHist(old_image,old_image);
 
 		#ifdef DEBUG
 			imshow("grayscale", src);
@@ -200,20 +222,83 @@ int main( int argc, char** argv )
 		new_image.copyTo(detected_road(rows,cols));
 
 		imshow("w road", detected_road);
-		threshold( detected_road, detected_road, 100, 255, THRESH_BINARY);
-		detected_road = getNearestBlob(detected_road, SIZE_X, SIZE_Y, 50);
+		threshold( detected_road, detected_road, 125, 255, THRESH_BINARY);
+		imshow("dirty road", detected_road);
+		detected_road = getNearestBlob(detected_road, SIZE_X, SIZE_Y, 2500);
 		imshow("detected road", detected_road);
 
-		//video.write(detected_road);
+/*********************** Keyboard *******************************************/
+
+		while(!keep_running && !(rewind_frame || forward_frame))
+		{
+			waitKey(10);
+		}
+
+		if(rewind_frame)
+		{
+			if(keep_running)
+			{
+				rewind_frame = false;
+				keep_running = false;
+			}
+
+			else
+			{
+				cap.set(CV_CAP_PROP_POS_FRAMES ,cap.get(CV_CAP_PROP_POS_FRAMES) - 5);
+				keep_running = true;
+			}
+		}
+
+		else if(forward_frame)
+		{
+			if(keep_running)
+			{
+				forward_frame = false;
+				keep_running = false;
+			}
+
+			else
+			{
+				cap.set(CV_CAP_PROP_POS_FRAMES ,cap.get(CV_CAP_PROP_POS_FRAMES) + 5);
+				keep_running = true;
+			}
+		}
+
+		//while(!keep_running){}
 		waitKey(50);
 	}
 
-	waitKey(100);
+    waitKey(100);
+
 	// When everything done, release the video capture object
 	cap.release();
-
 	// Closes all the frames
 	destroyAllWindows();
 
 	return 0;
+}
+
+static void* userInput_thread(void*)
+{
+	while(true)
+	{
+		char cmd = getchar();
+		getchar();
+
+		if ( (cmd == 'P') || (cmd == ' ') || (cmd == 'p'))
+		{
+			//! desired user input 'q' received
+			keep_running = !keep_running;
+		}
+
+		else if( cmd == 'f')
+		{
+			forward_frame = true;
+		}
+
+		else if( cmd == 'r')
+		{
+			rewind_frame = true;
+		}
+	}
 }
