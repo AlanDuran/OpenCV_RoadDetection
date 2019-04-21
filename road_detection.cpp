@@ -5,14 +5,15 @@
  *      Author: Alan Duran
  */
 
+/******* Includes *************************/
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <stdio.h>
 #include "otsu.h"
 #include "utils.h"
-#include <pthread.h>
 
+/***** Definitions ****************************/
 #define DEBUG
 #define FIND_HORIZON	0
 #define HORIZON_SIZE	0.7
@@ -29,11 +30,13 @@
  * base_aerea 	--> 75 200
  * atras_iteso 	--> 10 50
  */
-#define CANNY_LOW		15 /* Homogeneous roads 15 - 25, no homogeneous roads 75 - 100*/
-#define CANNY_HIGH		75 /* Homogeneous roads 75 - 100, no homogeneous roads 150 - 200*/
+#define CANNY_LOW		15
+#define CANNY_HIGH		75
 
-static void* userInput_thread(void*);
+/******** Prototypes *******************************/
+void callBackFunc(int event, int x, int y, int flags, void* userdata);
 
+/*****************************************************/
 using namespace std;
 using namespace cv;
 
@@ -41,16 +44,39 @@ static bool keep_running = true;
 static bool rewind_frame = false;
 static bool forward_frame = false;
 
+string winName = "GUI v0.1";
+Rect pauseButton, forwardButton, rewindButton;
+Mat canvas(Size(SIZE_X, SIZE_Y),CV_8UC3,Scalar(0,255,0));
+
 //Read video
 VideoCapture cap("data/iteso.mp4");
 
 int main( int argc, char** argv )
 {
-    pthread_t tId;
-    pthread_create(&tId, 0, userInput_thread, 0);
+    /********************* GUI initialization **********************************************/
+    pauseButton = Rect(0,0,SIZE_X, 50);
+    forwardButton = Rect(0,75,SIZE_X, 50);
+    rewindButton = Rect(0,150,SIZE_X, 50);
+
+	// Draw the buttons
+    Mat(pauseButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(pauseButton));
+    Mat(forwardButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(forwardButton));
+    Mat(rewindButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(rewindButton));
+
+    putText(canvas, "Pausa", Point(pauseButton.width*0.35, pauseButton.height*0.7),
+    		FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 8);
+    putText(canvas, "Avanzar", Point(forwardButton.width*0.30, forwardButton.height*0.7 + forwardButton.y),
+        		FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 8);
+    putText(canvas, "Regresar", Point(rewindButton.width*0.30, rewindButton.height*0.7 + rewindButton.y),
+            		FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 8);
+
+    // Setup callback function
+	namedWindow(winName);
+	setMouseCallback(winName, callBackFunc);
+
+    imshow(winName,canvas);
 
     /********************** Load image and pre-processing ******************************/
-
 
 	if(!cap.isOpened()){
 	    cout << "Error opening video stream or file" << endl;
@@ -203,19 +229,19 @@ int main( int argc, char** argv )
 		vector<Mat> planes;
 		Mat old_image, new_image;
 
-		cvtColor(display(rows,cols),old_image,CV_BGR2GRAY);
+		cvtColor(display,old_image,CV_BGR2GRAY);
 		//old_image = img.channel[0](rows,cols) * (255.0/180.0);
 		equalizeHist(old_image,old_image);
 
 		#ifdef DEBUG
-			imshow("grayscale", src);
+			imshow("grayscale", old_image);
 			otsu_road.copyTo(display_otsu(rows,cols));
 			imshow("Otsu", display_otsu);
 			edges.copyTo(display_edges(rows,cols));
 			imshow("Edges", display_edges);
 		#endif
 
-		addWeighted(old_image, 1.0/3.0, otsu_road, 1.0/3.0, 0, new_image);
+		addWeighted(old_image(rows,cols), 1.0/3.0, otsu_road, 1.0/3.0, 0, new_image);
 		addWeighted(new_image, 1.0, edges, 1.0/3.0, 0, new_image);
 
 		Mat detected_road = Mat::zeros(display.size(), CV_8UC1);
@@ -223,11 +249,11 @@ int main( int argc, char** argv )
 
 		imshow("w road", detected_road);
 		threshold( detected_road, detected_road, 125, 255, THRESH_BINARY);
-		imshow("dirty road", detected_road);
+		//imshow("dirty road", detected_road);
 		detected_road = getNearestBlob(detected_road, SIZE_X, SIZE_Y, 2500);
 		imshow("detected road", detected_road);
 
-/*********************** Keyboard *******************************************/
+/*********************** GUI events *******************************************/
 
 		while(!keep_running && !(rewind_frame || forward_frame))
 		{
@@ -278,27 +304,26 @@ int main( int argc, char** argv )
 	return 0;
 }
 
-static void* userInput_thread(void*)
+void callBackFunc(int event, int x, int y, int flags, void* userdata)
 {
-	while(true)
-	{
-		char cmd = getchar();
-		getchar();
+    if (event == EVENT_LBUTTONDOWN)
+    {
+        if (pauseButton.contains(Point(x, y)))
+        {
+        	keep_running = !keep_running;
+        }
 
-		if ( (cmd == 'P') || (cmd == ' ') || (cmd == 'p'))
-		{
-			//! desired user input 'q' received
-			keep_running = !keep_running;
-		}
-
-		else if( cmd == 'f')
-		{
+        else if (forwardButton.contains(Point(x, y)))
+        {
 			forward_frame = true;
-		}
+        }
 
-		else if( cmd == 'r')
-		{
+        else if (rewindButton.contains(Point(x, y)))
+        {
 			rewind_frame = true;
-		}
-	}
+        }
+    }
+
+    imshow(winName, canvas);
+    waitKey(1);
 }
