@@ -52,8 +52,6 @@ Mat removeShadows(Mat src, img_type *img)
 	cvtColor(src, src, CV_BGR2HSV);
 	split(src, img->channel);
 
-	//src = channel[0] * (255.0/180.0);
-
 	//Set V channel to a fixed value
 	//equalizeHist(channel[2],channel[2]);
 	img->channel[2] = Mat(src.rows, src.cols, CV_8UC1, 128);//Set V

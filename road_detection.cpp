@@ -15,23 +15,25 @@
 
 /***** Definitions ****************************/
 #define DEBUG
-#define FIND_HORIZON	0
+#define FIND_HORIZON	1
 #define HORIZON_SIZE	0.7
+#define FILL_LINES		0
 
 #define KERNEL_WIDTH	7
 #define KERNEL_HEIGHT	7
 #define SIGMA_X 		0
 #define SIGMA_Y			0
-#define SIZE_X			320
+#define SIZE_X			353
 #define SIZE_Y			200
 
 /*
- * iteso.mp4 	--> 15 75
+ * iteso.mp4 	--> 10 50
  * base_aerea 	--> 75 200
  * atras_iteso 	--> 10 50
  */
-#define CANNY_LOW		15
-#define CANNY_HIGH		75
+#define CANNY_LOW		10
+#define CANNY_HIGH		50
+#define CANNY_KERNEL	15
 
 /******** Prototypes *******************************/
 void callBackFunc(int event, int x, int y, int flags, void* userdata);
@@ -85,7 +87,7 @@ int main( int argc, char** argv )
 
 	while(true)
 	{
-		Mat src,dst,temp, display;
+		Mat src, dst, temp, display, srcBGR;
 		img_type img;
 
 		// Capture frame-by-frame
@@ -104,6 +106,7 @@ int main( int argc, char** argv )
 
 		//flip(src,src,-1);
 		display = src.clone();
+		cvtColor(display,srcBGR,CV_BGR2GRAY);
 
 		#ifdef DEBUG
 			Mat display_otsu = Mat::zeros(display.size(), CV_8UC1);
@@ -128,15 +131,17 @@ int main( int argc, char** argv )
 
 		if(FIND_HORIZON)
 		{
-			temp = img.channel[0](rows,cols).clone();
+			Rect horizon_area(src.cols * 0.43, 0, src.cols * 0.14, src.rows * HORIZON_SIZE);
+			temp = img.channel[0](horizon_area).clone();
 			GaussianBlur( temp, temp, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
+			imshow("sss",temp);
 			horizon = get_horizon(temp);
 			horizon = src.rows - horizon - src.rows * (1 - HORIZON_SIZE);
 		}
 
 		else
 		{
-			horizon = src.rows * 0.30;
+			horizon = src.rows * 0.35;
 		}
 
 		temp = display.clone();
@@ -151,21 +156,16 @@ int main( int argc, char** argv )
 		rows.start = horizon;
 		rows.end = src.rows;
 
-		/*
-		temp = img.channel[0](rows,cols).clone();
-		GaussianBlur( temp, temp, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
-		equalizeHist(temp,temp);
-		*/
-
 		img.img = dst(rows,cols).clone();
 		img.hist = getHistogram(img.img);
 		otsu_road = get_roadImage(&img);
+
 /******** Improvements with Canny detector and Hough Line transform *****************/
 
 		Mat houghP;
 
-		houghP = src(rows,cols).clone();
-		GaussianBlur( houghP, houghP, Size(5, 5), 0, 0);
+		houghP = srcBGR(rows,cols).clone();
+		GaussianBlur( houghP, houghP, Size(CANNY_KERNEL, CANNY_KERNEL), 0, 0);
 
 		// Edge detection
 		Canny(houghP, houghP, CANNY_LOW, CANNY_HIGH, 3);
@@ -191,20 +191,80 @@ int main( int argc, char** argv )
 		 * 	maxLineGap: The maximum gap between two points to be considered in the same line.
 		 */
 
-		HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 30 ); // runs the actual detection 10, CV_PI/180, 80, 15, 30
+		HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 30); // runs the actual detection 10, CV_PI/180, 80, 20, 30
 
-		// Draw the lines
+		float slopes[linesP.size()];
+		int slopeCount[linesP.size()];
+		int slopeIndex = 0;
+
 		for( size_t i = 0; i < linesP.size(); i++ )
 		{
 			Vec4i l = linesP[i];
-			line( houghP, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(255), 1, 16);
+
+			float currSlope = (l[3] - l[1]) / ( l[2] - l[0] + 0.001);
+
+			if(slopeIndex == 0)
+			{
+				slopes[0] = currSlope;
+				slopeCount[0] = 1;
+				slopeIndex++;
+			}
+
+			else
+			{
+				int index = 0;
+
+				for(index = 0; index <= slopeIndex; index++)
+				{
+					if(currSlope < (slopes[index] + 5) && currSlope > (slopes[index] - 5))
+					{
+						slopeCount[index]++;
+						break;
+					}
+				}
+
+				if(index > slopeIndex)
+				{
+					slopeIndex++;
+					slopes[slopeIndex] = currSlope;
+					slopeCount[slopeIndex] = 1;
+				}
+			}
 		}
 
-		#ifdef DEBUG
-			houghP.copyTo(display_lines(rows,cols));
-			imshow("Hough Lines", display_lines);
-		#endif
 
+		for( size_t i = 0; i < linesP.size(); i++ )
+		{
+			Vec4i l = linesP[i];
+			line( houghP, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(255), 2, 16);
+
+			if(l[2] > houghP.cols * 0.65 && FILL_LINES)
+			{
+				line( houghP, Point(l[0], l[1]), Point(houghP.cols, l[1]), Scalar(255), 1, 16);
+				line( houghP, Point(l[2], l[3]), Point(houghP.cols, l[3]), Scalar(255), 1, 16);
+				line( houghP, Point(houghP.cols, l[1]), Point(houghP.cols, l[3]), Scalar(255), 1, 16);
+			}
+
+			else if(l[2] < houghP.cols * 0.35 && FILL_LINES)
+			{
+				line( houghP, Point(l[0], l[1]), Point(0, l[1]), Scalar(255), 1, 16);
+				line( houghP, Point(l[2], l[3]), Point(0, l[3]), Scalar(255), 1, 16);
+				line( houghP, Point(0, l[1]), Point(0, l[3]), Scalar(255), 1, 16);
+			}
+
+			/*
+			if(!keep_running)
+			{
+			imshow("liddnn",houghP);
+			waitKey(0);
+			}
+			*/
+		}
+
+#ifdef DEBUG
+	houghP.copyTo(display_lines(rows,cols));
+	imshow("Hough Lines", display_lines);
+#endif
 /************************* Blob operations ******************************************/
 
 		vector<vector<Point> > contours;
@@ -218,19 +278,26 @@ int main( int argc, char** argv )
 		{
 			Scalar color = Scalar(255);
 			drawContours( temp, contours, i, color, CV_FILLED );
+			/*
+			if(!keep_running)
+			{
+			imshow("couttt",temp);
+			waitKey(0);
+			}
+			*/
 		}
 
 		//Negate image
 		temp = 255 - temp;
-		Mat edges = getNearestBlob(temp, SIZE_X, SIZE_Y, 250);
+		Mat edges = getNearestBlob(temp, src.cols, SIZE_Y, 250);
 
 /********************* weighted average of the images intensities *************************/
 
 		vector<Mat> planes;
 		Mat old_image, new_image;
 
-		cvtColor(display,old_image,CV_BGR2GRAY);
-		//old_image = img.channel[0](rows,cols) * (255.0/180.0);
+		old_image = srcBGR.clone();
+
 		equalizeHist(old_image,old_image);
 
 		#ifdef DEBUG
@@ -249,8 +316,7 @@ int main( int argc, char** argv )
 
 		imshow("w road", detected_road);
 		threshold( detected_road, detected_road, 125, 255, THRESH_BINARY);
-		//imshow("dirty road", detected_road);
-		detected_road = getNearestBlob(detected_road, SIZE_X, SIZE_Y, 2500);
+		detected_road = getNearestBlob(detected_road, src.cols, SIZE_Y, 2500);
 		imshow("detected road", detected_road);
 
 /*********************** GUI events *******************************************/
@@ -290,8 +356,7 @@ int main( int argc, char** argv )
 			}
 		}
 
-		//while(!keep_running){}
-		waitKey(50);
+		waitKey(30);
 	}
 
     waitKey(100);
