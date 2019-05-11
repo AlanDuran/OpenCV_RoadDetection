@@ -17,8 +17,8 @@
 #define DEBUG				1
 #define WRITE_VIDEO			1
 #define FIND_HORIZON		1
-#define HORIZON_SIZE		0.6
-#define FILL_LINES			0
+#define HORIZON_SIZE		0.65 //0.65
+#define FILL_LINES			1
 
 #define KERNEL_WIDTH		7
 #define KERNEL_HEIGHT		7
@@ -26,15 +26,17 @@
 #define SIGMA_Y				0
 #define SIZE_Y				200
 
-#define CANNY_LOW			10
+#define CANNY_LOW			5
 #define CANNY_HIGH			50
 
 /*
- * iteso.mp4 	--> 10 50
- * base_aerea 	--> 10 50
- * atras_iteso 	--> 10 50
+ * iteso.mp4 				--> 15
+ * iteso2.mp4 				--> 15
+ * base_aerea_atardecer 	--> 7
+ * base_aerea 				--> 11
+ * atras_iteso 				--> 11
  */
-#define CANNY_KERNEL		15
+#define CANNY_KERNEL			15
 
 /************************ Prototypes ***********************************************************/
 void menuCallBackFunc(int event, int x, int y, int flags, void* userdata);
@@ -212,74 +214,37 @@ int main( int argc, char** argv )
 		 * 	maxLineGap: The maximum gap between two points to be considered in the same line.
 		 */
 
-		HoughLinesP(houghP, linesP, 10, CV_PI/180, 80, 20, 30); // runs the actual detection 10, CV_PI/180, 80, 20, 30
-
-		float slopes[linesP.size()];
-		int slopeCount[linesP.size()];
-		int slopeIndex = 0;
-
-		for( size_t i = 0; i < linesP.size(); i++ )
-		{
-			Vec4i l = linesP[i];
-
-			float currSlope = (l[3] - l[1]) / ( l[2] - l[0] + 0.001);
-
-			if(slopeIndex == 0)
-			{
-				slopes[0] = currSlope;
-				slopeCount[0] = 1;
-				slopeIndex++;
-			}
-
-			else
-			{
-				int index = 0;
-
-				for(index = 0; index <= slopeIndex; index++)
-				{
-					if(currSlope < (slopes[index] + 5) && currSlope > (slopes[index] - 5))
-					{
-						slopeCount[index]++;
-						break;
-					}
-				}
-
-				if(index > slopeIndex)
-				{
-					slopeIndex++;
-					slopes[slopeIndex] = currSlope;
-					slopeCount[slopeIndex] = 1;
-				}
-			}
-		}
-
+		HoughLinesP(houghP, linesP, 10, CV_PI/180, 30, 1, 10); // runs the actual detection 10, CV_PI/180, 80, 20, 30
 
 		for( size_t i = 0; i < linesP.size(); i++ )
 		{
 			Vec4i l = linesP[i];
 			line( houghP, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(255), 2, 16);
 
-			if(l[2] > houghP.cols * 0.65 && FILL_LINES)
+			double size = (l[0] - l[2])*(l[0] - l[2]) + (l[1] - l[3])*(l[1] - l[3]);
+			double slope = (l[3] - l[1]) / ( l[2] - l[0] + 0.0001);
+
+			//printf("size %lf, slope %lf\n", size, slope);
+
+			/*
+			 * Check the size, position and slope of the line to define if it's part of the road
+			 * and if so, form a contour with it and the sides of the image
+			 */
+			if((l[0] > houghP.cols * 0.75 || l[2] > houghP.cols * 0.75)
+					&& slope > 0.2 && size > 500 && FILL_LINES)
 			{
 				line( houghP, Point(l[0], l[1]), Point(houghP.cols, l[1]), Scalar(255), 1, 16);
 				line( houghP, Point(l[2], l[3]), Point(houghP.cols, l[3]), Scalar(255), 1, 16);
 				line( houghP, Point(houghP.cols, l[1]), Point(houghP.cols, l[3]), Scalar(255), 1, 16);
 			}
 
-			else if(l[2] < houghP.cols * 0.35 && FILL_LINES)
+			else if((l[0] < houghP.cols * 0.25 || l[2] < houghP.cols * 0.25)
+				&& slope < -0.2 &&  size > 500 && FILL_LINES)
 			{
 				line( houghP, Point(l[0], l[1]), Point(0, l[1]), Scalar(255), 1, 16);
 				line( houghP, Point(l[2], l[3]), Point(0, l[3]), Scalar(255), 1, 16);
-				line( houghP, Point(0, l[1]), Point(0, l[3]), Scalar(255), 1, 16);
+				line( houghP, Point(0, l[1]), Point(1, l[3]), Scalar(255), 1, 16);
 			}
-
-			/*
-			if(!keep_running)
-			{
-			imshow("liddnn",houghP);
-			waitKey(0);
-			}
-			*/
 		}
 
 		#if DEBUG | WRITE_VIDEO
@@ -298,18 +263,11 @@ int main( int argc, char** argv )
 		{
 			Scalar color = Scalar(255);
 			drawContours( temp, contours, i, color, CV_FILLED );
-			/*
-			if(!keep_running)
-			{
-			imshow("couttt",temp);
-			waitKey(0);
-			}
-			*/
 		}
 
 		//Negate image
 		temp = 255 - temp;
-		Mat edges = getNearestBlob(temp, src.cols, SIZE_Y, 250);
+		Mat edges = getNearestBlob(temp, src.cols, SIZE_Y, 1500);
 
 /********************* weighted average of the images intensities *************************/
 
@@ -328,7 +286,7 @@ int main( int argc, char** argv )
 		new_image.copyTo(w_road(rows,cols));
 
 		threshold( w_road, detected_road, 125, 255, THRESH_BINARY);
-		detected_road = getNearestBlob(detected_road, src.cols, SIZE_Y, 2500);
+		detected_road = getNearestBlob(detected_road, src.cols, SIZE_Y, 1500);
 
 /***************** Print and save output **************************************************/
 		#if DEBUG | WRITE_VIDEO
@@ -415,7 +373,7 @@ int main( int argc, char** argv )
 			}
 		}
 
-		waitKey(1);
+		waitKey(10);
 	}
 
     waitKey(100);

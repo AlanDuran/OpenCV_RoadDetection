@@ -96,7 +96,7 @@ Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 
 		else
 		{
-			dist[i] = 	1000000; //Arbitrary distance
+			dist[i] = 	10000000; //Arbitrary distance
 		}
 	}
 
