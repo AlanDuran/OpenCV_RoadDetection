@@ -17,7 +17,7 @@
 #define DEBUG				1
 #define WRITE_VIDEO			1
 #define FIND_HORIZON		1
-#define HORIZON_SIZE		0.65 //0.65
+#define HORIZON_SIZE		0.6 //0.60
 #define FILL_LINES			1
 
 #define KERNEL_WIDTH		7
@@ -33,8 +33,9 @@
  * iteso.mp4 				--> 15
  * iteso2.mp4 				--> 15
  * base_aerea_atardecer 	--> 7
- * base_aerea 				--> 11
+ * base_aerea_dia 			--> 11
  * atras_iteso 				--> 11
+ * carretera 				--> 11
  */
 #define CANNY_KERNEL			15
 
@@ -43,7 +44,6 @@ void menuCallBackFunc(int event, int x, int y, int flags, void* userdata);
 void frameCallBackFunc(int event, int x, int y, int flags, void* userdata);
 
 /********************* Memory reservations *****************************************************/
-
 using namespace std;
 using namespace cv;
 
@@ -52,7 +52,8 @@ static bool rewind_frame = false;
 static bool forward_frame = false;
 
 //Read video
-VideoCapture cap("data/iteso.mp4");
+string filename = "iteso.mp4";
+VideoCapture cap("data/" + filename);
 
 string winName = "GUI v0.1";
 string outWinName = "Out";
@@ -65,11 +66,14 @@ Mat out_frame(Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PR
 		CV_8UC3,Scalar(0,0,0));
 
 #if WRITE_VIDEO
-	VideoWriter video("outcpp.avi",CV_FOURCC('M','J','P','G'),25,
+	VideoWriter video(filename.substr(0,sizeof(filename) - 3) + ".avi",CV_FOURCC('M','J','P','G'),cap.get(CV_CAP_PROP_FPS),
 			Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) - 1,3*SIZE_Y + 90), 1);
 #endif
 
+/********************************************************************************************/
+
 int main( int argc, char** argv )
+
 {
     /********************* GUI initialization **********************************************/
     pauseButton = Rect(0,0,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
@@ -92,15 +96,14 @@ int main( int argc, char** argv )
             FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1,32);
     putText(out_frame, "Canny                    Hough Lines                 Hough Road", Point(140, SIZE_Y + 50),
             FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1, 32);
-    putText(out_frame, "Equalized grayscale          Average of images             Detected road", Point(55, SIZE_Y*2 + 80),
+    putText(out_frame, "Equalized grayscale              Yellow area                 Detected road", Point(55, SIZE_Y*2 + 80),
             FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1, 32);
 
     // Setup callback function
 	namedWindow(winName);
 	namedWindow(outWinName);
-	setMouseCallback(winName, menuCallBackFunc);
-	setMouseCallback(outWinName, frameCallBackFunc);
 
+	setMouseCallback(winName, menuCallBackFunc);
     imshow(winName,canvas);
 
     /********************** Load image and pre-processing ******************************/
@@ -112,7 +115,7 @@ int main( int argc, char** argv )
 
 	while(true)
 	{
-		Mat src, dst, temp, display, srcBGR;
+		Mat src, dst, temp, display, srcBGR, srcHSV;
 		img_type img;
 
 		// Capture frame-by-frame
@@ -144,7 +147,11 @@ int main( int argc, char** argv )
 		src = removeShadows(src,&img);
 
 		//Smoothing image with Gaussian filter
-		GaussianBlur( src, dst, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
+		GaussianBlur(src, dst, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
+
+		//Change color space and store channels
+		cvtColor(display, srcHSV, CV_BGR2HSV);
+		GaussianBlur(srcHSV, srcHSV, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 
 /**************** Horizon detection *************************************************/
 
@@ -282,11 +289,21 @@ int main( int argc, char** argv )
 		addWeighted(new_image, 1.0, edges, 1.0/3.0, 0, new_image);
 
 		Mat w_road = Mat::zeros(display.size(), CV_8UC1);
-		Mat detected_road = Mat::zeros(display.size(), CV_8UC1);
+		Mat thres_road = Mat::zeros(display.size(), CV_8UC1);
 		new_image.copyTo(w_road(rows,cols));
 
-		threshold( w_road, detected_road, 125, 255, THRESH_BINARY);
-		detected_road = getNearestBlob(detected_road, src.cols, SIZE_Y, 1500);
+		threshold( w_road, thres_road, 125, 255, THRESH_BINARY);
+		thres_road = getNearestBlob(thres_road, src.cols, SIZE_Y, 1500);
+
+/************************** Color segmentation ********************************************/
+
+		Mat hsv_out, detected_road;
+
+		thres_road.copyTo(detected_road);
+		inRange(srcHSV,Scalar(20, 50, 0), Scalar(30, 255, 255),hsv_out);
+		hsv_out = 255 - hsv_out;
+		detected_road = detected_road & hsv_out;
+		detected_road = getNearestBlob(detected_road, src.cols, SIZE_Y, 500);
 
 /***************** Print and save output **************************************************/
 		#if DEBUG | WRITE_VIDEO
@@ -304,7 +321,7 @@ int main( int argc, char** argv )
 			out_img.push_back(display_edges);
 
 			out_img.push_back(old_image);
-			out_img.push_back(w_road);
+			out_img.push_back(hsv_out);
 			out_img.push_back(detected_road);
 
 			for(unsigned int i = 0; i < 3; i++)
@@ -380,7 +397,11 @@ int main( int argc, char** argv )
 
 	// When everything done, release the video capture object
 	cap.release();
+
+	#if WRITE_VIDEO
 	video.release();
+	#endif
+
 	// Closes all the frames
 	destroyAllWindows();
 
@@ -407,7 +428,7 @@ void menuCallBackFunc(int event, int x, int y, int flags, void* userdata)
         }
     }
 
-    waitKey(1);
+    waitKey(10);
 }
 
 void frameCallBackFunc(int event, int x, int y, int flags, void* userdata)
