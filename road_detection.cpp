@@ -14,8 +14,9 @@
 #include "utils.h"
 
 /***** Definitions ****************************/
-#define DEBUG				1
-#define WRITE_VIDEO			1
+#define DEBUG				2 // 0 -> no debug, 1 -> only output, 2 -> full debug
+#define WRITE_VIDEO			0
+#define GUI					1
 #define FIND_HORIZON		1
 #define HORIZON_SIZE		0.6 //0.60
 #define FILL_LINES			1
@@ -66,7 +67,7 @@ Mat out_frame(Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PR
 		CV_8UC3,Scalar(0,0,0));
 
 #if WRITE_VIDEO
-	VideoWriter video(filename.substr(0,sizeof(filename) - 3) + ".avi",CV_FOURCC('M','J','P','G'),cap.get(CV_CAP_PROP_FPS),
+	VideoWriter video(filename.substr(0,filename.size() - 4) + ".avi",CV_FOURCC('M','J','P','G'),cap.get(CV_CAP_PROP_FPS),
 			Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) - 1,3*SIZE_Y + 90), 1);
 #endif
 
@@ -76,35 +77,39 @@ int main( int argc, char** argv )
 
 {
     /********************* GUI initialization **********************************************/
-    pauseButton = Rect(0,0,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
-    forwardButton = Rect(0,75,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
-    rewindButton = Rect(0,150,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
+	#if DEBUG >= 2
+		putText(out_frame, "Original             Homogeneous grayscale               Otsu", Point(135,20),
+				FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1,32);
+		putText(out_frame, "Canny                    Hough Lines                 Hough Road", Point(140, SIZE_Y + 50),
+				FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1, 32);
+		putText(out_frame, "Equalized grayscale              Yellow area                 Detected road", Point(55, SIZE_Y*2 + 80),
+				FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1, 32);
 
-	// Draw the buttons
-    Mat(pauseButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(pauseButton));
-    Mat(forwardButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(forwardButton));
-    Mat(rewindButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(rewindButton));
+		namedWindow(outWinName);
+	#endif
 
-    putText(canvas, "Pausa", Point(pauseButton.width*0.35, pauseButton.height*0.7),
-    		FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 16);
-    putText(canvas, "Avanzar", Point(forwardButton.width*0.30, forwardButton.height*0.7 + forwardButton.y),
-        	FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 16);
-    putText(canvas, "Regresar", Point(rewindButton.width*0.30, rewindButton.height*0.7 + rewindButton.y),
-            FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 16);
+	#if GUI
+		// Setup callback function
+		pauseButton = Rect(0,0,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
+		forwardButton = Rect(0,75,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
+		rewindButton = Rect(0,150,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
 
-    putText(out_frame, "Original             Homogeneous grayscale               Otsu", Point(135,20),
-            FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1,32);
-    putText(out_frame, "Canny                    Hough Lines                 Hough Road", Point(140, SIZE_Y + 50),
-            FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1, 32);
-    putText(out_frame, "Equalized grayscale              Yellow area                 Detected road", Point(55, SIZE_Y*2 + 80),
-            FONT_HERSHEY_DUPLEX, 0.75, Scalar(255,255,255), 1, 32);
+		// Draw the buttons
+		Mat(pauseButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(pauseButton));
+		Mat(forwardButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(forwardButton));
+		Mat(rewindButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(rewindButton));
 
-    // Setup callback function
-	namedWindow(winName);
-	namedWindow(outWinName);
+		putText(canvas, "Pausa", Point(pauseButton.width*0.35, pauseButton.height*0.7),
+				FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 16);
+		putText(canvas, "Avanzar", Point(forwardButton.width*0.30, forwardButton.height*0.7 + forwardButton.y),
+				FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 16);
+		putText(canvas, "Regresar", Point(rewindButton.width*0.30, rewindButton.height*0.7 + rewindButton.y),
+				FONT_HERSHEY_DUPLEX, 1, Scalar(0,0,0), 1, 16);
 
-	setMouseCallback(winName, menuCallBackFunc);
-    imshow(winName,canvas);
+		namedWindow(winName);
+		setMouseCallback(winName, menuCallBackFunc);
+		imshow(winName,canvas);
+	#endif
 
     /********************** Load image and pre-processing ******************************/
 
@@ -115,6 +120,10 @@ int main( int argc, char** argv )
 
 	while(true)
 	{
+		clock_t start, end;
+
+		start = clock();
+
 		Mat src, dst, temp, display, srcBGR, srcHSV;
 		img_type img;
 
@@ -136,7 +145,7 @@ int main( int argc, char** argv )
 		display = src.clone();
 		cvtColor(display,srcBGR,CV_BGR2GRAY);
 
-		#if DEBUG | WRITE_VIDEO
+		#if DEBUG >= 2 | WRITE_VIDEO
 			Mat display_otsu = Mat::zeros(display.size(), CV_8UC1);
 			Mat display_canny = Mat::zeros(display.size(), CV_8UC1);
 			Mat display_lines = Mat::zeros(display.size(), CV_8UC1);
@@ -201,7 +210,7 @@ int main( int argc, char** argv )
 		// Edge detection
 		Canny(houghP, houghP, CANNY_LOW, CANNY_HIGH, 3);
 
-		#if DEBUG | WRITE_VIDEO
+		#if DEBUG >= 2 | WRITE_VIDEO
 			houghP.copyTo(display_canny(rows,cols));
 		#endif
 
@@ -254,7 +263,7 @@ int main( int argc, char** argv )
 			}
 		}
 
-		#if DEBUG | WRITE_VIDEO
+		#if DEBUG >= 2 | WRITE_VIDEO
 			houghP.copyTo(display_lines(rows,cols));
 		#endif
 /************************* Blob operations ******************************************/
@@ -306,7 +315,7 @@ int main( int argc, char** argv )
 		detected_road = getNearestBlob(detected_road, src.cols, SIZE_Y, 500);
 
 /***************** Print and save output **************************************************/
-		#if DEBUG | WRITE_VIDEO
+		#if DEBUG >= 2 | WRITE_VIDEO
 			otsu_road.copyTo(display_otsu(rows,cols));
 			edges.copyTo(display_edges(rows,cols));
 
@@ -348,10 +357,17 @@ int main( int argc, char** argv )
 				video.write(out_frame);
 			#endif
 
-		#else
+		#elif DEBUG == 1
 			imshow("Original Image",display_original);
 			imshow("Detected road",detected_road);
 		#endif
+
+		end = clock();
+
+		// Calculating total time taken by the program.
+		double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
+		cout << "Time taken by program is : " << time_taken;
+		cout << " sec " << endl;
 
 /*********************** GUI events *******************************************/
 
