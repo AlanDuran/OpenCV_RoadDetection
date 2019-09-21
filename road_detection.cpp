@@ -14,8 +14,8 @@
 #include "utils.h"
 
 /***** Definitions ****************************/
-#define DEBUG				2 // 0 -> no debug, 1 -> only output, 2 -> full debug
-#define WRITE_VIDEO			0
+#define DEBUG				1 // 0 -> no debug, 1 -> only output, 2 -> full debug
+#define WRITE_VIDEO			1
 #define GUI					1
 #define FIND_HORIZON		1
 #define HORIZON_SIZE		0.6 //0.60
@@ -366,8 +366,8 @@ int main( int argc, char** argv )
 
 		// Calculating total time taken by the program.
 		double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
-		cout << "Time taken by program is : " << time_taken;
-		cout << " sec " << endl;
+		printf("Time taken by program is %f sec\n", time_taken);
+		//cout << " sec " << endl;
 
 /*********************** GUI events *******************************************/
 
