@@ -15,7 +15,7 @@
 
 /***** Definitions ****************************/
 #define DEBUG				2 // 0 -> no debug, 1 -> only output, 2 -> full debug
-#define WRITE_VIDEO			0
+#define WRITE_VIDEO			1
 #define GUI					1
 #define FIND_HORIZON		1
 #define HORIZON_SIZE		0.6 //0.60
@@ -60,10 +60,9 @@ string winName = "GUI v0.1";
 string outWinName = "Out";
 
 Rect pauseButton, forwardButton, rewindButton;
-Mat canvas(Size(cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), SIZE_Y),
-		CV_8UC3,Scalar(0,255,0));
+Mat canvas(Size(350, 200), CV_8UC3,Scalar(0,255,0));
 
-Mat out_frame(Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) - 1, 3*SIZE_Y + 90),
+Mat out_frame(Size(3*(int)(cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT))), 3*SIZE_Y + 90),
 		CV_8UC3,Scalar(0,0,0));
 
 #if WRITE_VIDEO
@@ -76,6 +75,7 @@ Mat out_frame(Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PR
 int main( int argc, char** argv )
 
 {
+	printf("%f\n",cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) );
     /********************* GUI initialization **********************************************/
 	#if DEBUG >= 2
 		putText(out_frame, "Original             Homogeneous grayscale               Otsu", Point(135,20),
@@ -90,9 +90,9 @@ int main( int argc, char** argv )
 
 	#if GUI
 		// Setup callback function
-		pauseButton = Rect(0,0,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
-		forwardButton = Rect(0,75,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
-		rewindButton = Rect(0,150,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
+		pauseButton = Rect(0,0, 350, 50);
+		forwardButton = Rect(0,75, 350, 50);
+		rewindButton = Rect(0,150, 350, 50);
 
 		// Draw the buttons
 		Mat(pauseButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(pauseButton));
@@ -366,8 +366,7 @@ int main( int argc, char** argv )
 
 		// Calculating total time taken by the program.
 		double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
-		cout << "Time taken by program is : " << time_taken;
-		cout << " sec " << endl;
+		printf("Time taken by program is : %f sec", time_taken);
 
 /*********************** GUI events *******************************************/
 
