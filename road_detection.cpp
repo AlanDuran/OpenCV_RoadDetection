@@ -15,11 +15,17 @@
 
 /***** Definitions ****************************/
 #define DEBUG				2 // 0 -> no debug, 1 -> only output, 2 -> full debug
-#define WRITE_VIDEO			0
-#define GUI					1
+#define WRITE_VIDEO			1
+#define GUI					0
 #define FIND_HORIZON		1
 #define HORIZON_SIZE		0.6 //0.60
 #define FILL_LINES			1
+
+#define CAMERA				1
+#define CAPTURE_WIDTH		3280
+#define CAPTURE_HEIGHT		2464
+#define FRAMERATE			10
+#define FLIP_METHOD			0
 
 #define KERNEL_WIDTH		7
 #define KERNEL_HEIGHT		7
@@ -52,23 +58,36 @@ static bool keep_running = true;
 static bool rewind_frame = false;
 static bool forward_frame = false;
 
-//Read video
 string filename = "iteso.mp4";
-VideoCapture cap("data/" + filename);
-
 string winName = "GUI v0.1";
 string outWinName = "Out";
 
-Rect pauseButton, forwardButton, rewindButton;
-Mat canvas(Size(cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), SIZE_Y),
-		CV_8UC3,Scalar(0,255,0));
+#if CAMERA
+	Size frame_size(CAPTURE_WIDTH*((float)SIZE_Y / CAPTURE_HEIGHT), SIZE_Y);
+	int framerate = FRAMERATE;
 
-Mat out_frame(Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) - 1, 3*SIZE_Y + 90),
-		CV_8UC3,Scalar(0,0,0));
+	string pipeline = gstreamer_pipeline(CAPTURE_WIDTH,
+				CAPTURE_HEIGHT,
+				CAPTURE_WIDTH,
+				CAPTURE_HEIGHT,
+				framerate,
+				FLIP_METHOD);
+
+	 VideoCapture cap(pipeline, 1800); //CAP_GSTREAMER
+#else
+	//Read video
+	VideoCapture cap("data/" + filename);
+	Size frame_size(cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), SIZE_Y);
+	int framerate = cap.get(CV_CAP_PROP_FPS);
+#endif
+
+Rect pauseButton, forwardButton, rewindButton;
+Mat canvas(Size(350, 200), CV_8UC3,Scalar(0,255,0));
+Mat out_frame(Size(3*frame_size.width, 3*SIZE_Y + 90), CV_8UC3,Scalar(0,0,0));
 
 #if WRITE_VIDEO
-	VideoWriter video(filename.substr(0,filename.size() - 4) + ".avi",CV_FOURCC('M','J','P','G'),cap.get(CV_CAP_PROP_FPS),
-			Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) - 1,3*SIZE_Y + 90), 1);
+	VideoWriter video(filename.substr(0,filename.size() - 4) + ".avi",CV_FOURCC('M','J','P','G'), framerate,
+			Size(3*frame_size.width, 3*SIZE_Y + 90), 1);
 #endif
 
 /********************************************************************************************/
@@ -90,9 +109,9 @@ int main( int argc, char** argv )
 
 	#if GUI
 		// Setup callback function
-		pauseButton = Rect(0,0,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
-		forwardButton = Rect(0,75,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
-		rewindButton = Rect(0,150,cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)), 50);
+		pauseButton = Rect(0,0, 350, 50);
+		forwardButton = Rect(0,75, 350, 50);
+		rewindButton = Rect(0,150, 350, 50);
 
 		// Draw the buttons
 		Mat(pauseButton.size(),CV_8UC3,Scalar(200,200,200)).copyTo(canvas(pauseButton));
@@ -112,11 +131,11 @@ int main( int argc, char** argv )
 	#endif
 
     /********************** Load image and pre-processing ******************************/
-
 	if(!cap.isOpened()){
-	    cout << "Error opening video stream or file" << endl;
+	    cout << "Error opening video stream or camera" << endl;
 	    return -1;
 	}
+
 
 	while(true)
 	{
@@ -128,7 +147,11 @@ int main( int argc, char** argv )
 		img_type img;
 
 		// Capture frame-by-frame
-		cap >> src;
+		#if CAMERA
+			cap.read(src);
+		#else
+			cap >> src;
+		#endif
 
 		if (src.empty())
 		      break;
@@ -366,8 +389,7 @@ int main( int argc, char** argv )
 
 		// Calculating total time taken by the program.
 		double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
-		cout << "Time taken by program is : " << time_taken;
-		cout << " sec " << endl;
+		printf("Time taken by program is : %f sec", time_taken);
 
 /*********************** GUI events *******************************************/
 
@@ -444,7 +466,7 @@ void menuCallBackFunc(int event, int x, int y, int flags, void* userdata)
         }
     }
 
-    waitKey(10);
+    waitKey(1);
 }
 
 void frameCallBackFunc(int event, int x, int y, int flags, void* userdata)
