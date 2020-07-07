@@ -53,8 +53,8 @@ static bool rewind_frame = false;
 static bool forward_frame = false;
 
 //Read video
-string filename = "iteso.mp4";
-VideoCapture cap("data/" + filename);
+string filename = "../input_data/iteso.mp4";
+VideoCapture cap(filename);
 
 string winName = "GUI v0.1";
 string outWinName = "Out";
@@ -62,12 +62,12 @@ string outWinName = "Out";
 Rect pauseButton, forwardButton, rewindButton;
 Mat canvas(Size(350, 200), CV_8UC3,Scalar(0,255,0));
 
-Mat out_frame(Size(3*(int)(cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT))), 3*SIZE_Y + 90),
+Mat out_frame(Size(3*(int)(cap.get(CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CAP_PROP_FRAME_HEIGHT))), 3*SIZE_Y + 90),
 		CV_8UC3,Scalar(0,0,0));
 
 #if WRITE_VIDEO
-	VideoWriter video(filename.substr(0,filename.size() - 4) + ".avi",CV_FOURCC('M','J','P','G'),cap.get(CV_CAP_PROP_FPS),
-			Size(3*cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) - 1,3*SIZE_Y + 90), 1);
+	VideoWriter video(filename.substr(0,filename.size() - 4) + ".avi",VideoWriter::fourcc('M','J','P','G'),cap.get(CAP_PROP_FPS),
+			Size(3*cap.get(CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CAP_PROP_FRAME_HEIGHT)) - 1,3*SIZE_Y + 90), 1);
 #endif
 
 /********************************************************************************************/
@@ -75,7 +75,7 @@ Mat out_frame(Size(3*(int)(cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_
 int main( int argc, char** argv )
 
 {
-	printf("%f\n",cap.get(CV_CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CV_CAP_PROP_FRAME_HEIGHT)) );
+	printf("%f\n",cap.get(CAP_PROP_FRAME_WIDTH)*(SIZE_Y /cap.get(CAP_PROP_FRAME_HEIGHT)) );
     /********************* GUI initialization **********************************************/
 	#if DEBUG >= 2
 		putText(out_frame, "Original             Homogeneous grayscale               Otsu", Point(135,20),
@@ -143,7 +143,7 @@ int main( int argc, char** argv )
 
 		//flip(src,src,-1);
 		display = src.clone();
-		cvtColor(display,srcBGR,CV_BGR2GRAY);
+		cvtColor(display,srcBGR, COLOR_BGR2GRAY);
 
 		#if DEBUG >= 2 | WRITE_VIDEO
 			Mat display_otsu = Mat::zeros(display.size(), CV_8UC1);
@@ -159,7 +159,7 @@ int main( int argc, char** argv )
 		GaussianBlur(src, dst, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 
 		//Change color space and store channels
-		cvtColor(display, srcHSV, CV_BGR2HSV);
+		cvtColor(display, srcHSV, COLOR_BGR2HSV);
 		GaussianBlur(srcHSV, srcHSV, Size(KERNEL_WIDTH, KERNEL_HEIGHT), SIGMA_X, SIGMA_Y);
 
 /**************** Horizon detection *************************************************/
@@ -270,7 +270,7 @@ int main( int argc, char** argv )
 
 		vector<vector<Point> > contours;
 		vector<Vec4i> hierarchy;
-		findContours( houghP, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+		findContours( houghP, contours, hierarchy ,RETR_EXTERNAL, CHAIN_APPROX_SIMPLE );
 
 		temp = Mat::zeros(houghP.size(), CV_8UC1);
 
@@ -278,7 +278,7 @@ int main( int argc, char** argv )
 		for (uint i = 0; i< contours.size(); i++)
 		{
 			Scalar color = Scalar(255);
-			drawContours( temp, contours, i, color, CV_FILLED );
+			drawContours( temp, contours, i, color, FILLED );
 		}
 
 		//Negate image
@@ -343,7 +343,7 @@ int main( int argc, char** argv )
 
 					if(frame.type() == CV_8UC1)
 					{
-						cvtColor(frame,frame, CV_GRAY2BGR);
+						cvtColor(frame,frame, COLOR_GRAY2BGR);
 					}
 
 					frame.copyTo(out_frame(rows,cols));
@@ -385,7 +385,7 @@ int main( int argc, char** argv )
 
 			else
 			{
-				cap.set(CV_CAP_PROP_POS_FRAMES ,cap.get(CV_CAP_PROP_POS_FRAMES) - 5);
+				cap.set(CAP_PROP_POS_FRAMES ,cap.get(CAP_PROP_POS_FRAMES) - 5);
 				keep_running = true;
 			}
 		}
@@ -400,7 +400,7 @@ int main( int argc, char** argv )
 
 			else
 			{
-				cap.set(CV_CAP_PROP_POS_FRAMES ,cap.get(CV_CAP_PROP_POS_FRAMES) + 5);
+				cap.set(CAP_PROP_POS_FRAMES ,cap.get(CAP_PROP_POS_FRAMES) + 5);
 				keep_running = true;
 			}
 		}

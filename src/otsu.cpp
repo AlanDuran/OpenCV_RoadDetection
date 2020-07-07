@@ -20,7 +20,7 @@ using namespace std;
 uint8_t get_threshold(Mat hist, int limit)
 {
 	double q[2] = {0,0}, w_mean[2] = {0,0}, cv[2] = {0,0};
-	double intra_cv[limit];
+	double *intra_cv = new double[limit];
 	int threshold,i;
 
 	for (threshold = 0; threshold < limit; threshold++)
@@ -79,7 +79,7 @@ uint8_t get_threshold(Mat hist, int limit)
 		intra_cv[threshold] = q[0]*cv[0] + q[1]*cv[1];
 	}
 	//Get index of min element
-	return distance(intra_cv,min_element(intra_cv, intra_cv + limit));
+	return distance(intra_cv, min_element(intra_cv, intra_cv + limit));
 }
 
 uint16_t get_horizon(Mat image)
@@ -124,7 +124,8 @@ uint16_t get_horizon(Mat image)
 	}
 
 	//Calculate the percentage difference between segments
-	for(i = 1; i <= N_DIV; i++)
+	pdiff[0] = 0;
+ 	for(i = 1; i < N_DIV; i++)
 	{
 		double prom = (accum[i-1] + accum[i]) / 2;
 		pdiff[i] = abs((accum[i] - accum[i-1]) / prom);

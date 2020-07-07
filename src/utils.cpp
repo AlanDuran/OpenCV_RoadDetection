@@ -8,8 +8,6 @@
 #include "utils.h"
 
 #include <stdio.h>
-#include <termios.h>
-#include <unistd.h>
 
 using namespace cv;
 using namespace std;
@@ -24,9 +22,8 @@ Mat getHistogram(Mat src)
 	float range[] = { 0, (float)histSize - 1}; //the upper boundary is exclusive
 	const float* histRange = { range };
 	bool uniform = true, accumulate = false;
-
-	calcHist( &src, 1, CV_HIST_ARRAY, Mat(), img_hist, 1, &histSize, &histRange, uniform, accumulate );
-
+	calcHist( &src, 1, 0, Mat(), img_hist, 1, &histSize, &histRange, uniform, accumulate ); //CV_HIST_ARRAY
+	
 	return img_hist;
 }
 
@@ -49,7 +46,7 @@ void drawHistogram(Mat img_hist, Mat dst, Scalar color)
 Mat removeShadows(Mat src, img_type *img)
 {
 	//Convert to HSV
-	cvtColor(src, src, CV_BGR2HSV);
+	cvtColor(src, src, COLOR_BGR2HSV);
 	split(src, img->channel);
 
 	//Set V channel to a fixed value
@@ -58,10 +55,10 @@ Mat removeShadows(Mat src, img_type *img)
 
 	//Merge channels
 	merge(img->channel, 3, src);
-	cvtColor(src, src, CV_HSV2BGR);
+	cvtColor(src, src, COLOR_HSV2BGR);
 
 	//2. Convert to gray and normalize
-	cvtColor(src, src, CV_BGR2GRAY);
+	cvtColor(src, src, COLOR_BGR2GRAY);
 	normalize(src, src, 0, 255, NORM_MINMAX, CV_8UC1);
 	return src;
 }
@@ -71,7 +68,7 @@ Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 
-	findContours( src, contours, hierarchy ,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+	findContours( src, contours, hierarchy , RETR_EXTERNAL, CHAIN_APPROX_SIMPLE );
 
 	// get the moments of the contours
 	vector<Moments> mu(contours.size());
@@ -81,7 +78,7 @@ Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 	}
 
 	// get the centroids and calculate distances to bottom center of the image.
-	double dist[contours.size()];
+	double *dist = new double[contours.size()];
 	int countourIndex;
 
 	for( unsigned int i = 0; i<contours.size(); i++)
@@ -96,16 +93,16 @@ Mat getNearestBlob(Mat src, int coordX, int coordY, int minArea)
 
 		else
 		{
-			dist[i] = 	10000000; //Arbitrary distance
+			dist[i] = 10000000; //Arbitrary distance
 		}
 	}
 
 	//select minimun distance of centroid
-	countourIndex = distance(dist,min_element(dist, dist + contours.size()));
+	countourIndex = distance(dist, min_element(dist, dist + contours.size()));
 
 	//draw selected blob
 	Mat edges = Mat::zeros(src.size(), CV_8UC1);
-	drawContours( edges, contours, countourIndex, Scalar(255), CV_FILLED );
+	drawContours( edges, contours, countourIndex, Scalar(255), FILLED );
 
 	return edges;
 }
